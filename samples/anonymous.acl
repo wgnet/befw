@@ -1,0 +1,21 @@
+agent "" {
+      policy = "read"
+}
+node "" {
+      policy = "read"
+}
+service "" {
+      policy = "read"
+}
+key "befw" {
+      policy = "read"
+}
+key "" {
+      policy = "deny"
+}
+session "" {
+      policy = "read"
+}
+event "" {
+      policy = "read"
+}

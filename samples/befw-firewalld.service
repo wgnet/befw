@@ -1,0 +1,12 @@
+[Unit]
+Description=Backend Firewall Service
+After=iptables.service consul.service
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/bin/befw-firewalld
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
