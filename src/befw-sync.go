@@ -20,12 +20,13 @@ import "./befw"
 import "./puppetdbsync"
 
 func main() {
-	defer panicRecovery()
 	config := flag.String("config", "/etc/befw.sync.conf", "BEFW-SYNC config file")
 	debug := flag.Bool("debug", false, "StartService with debug configuration")
 	flag.Parse()
 	if *debug {
 		befw.ConfigurationRunning = befw.DebugConfiguration
+	} else {
+		defer panicRecovery()
 	}
 	puppetdbsync.Run(*config)
 }

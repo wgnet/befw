@@ -47,17 +47,18 @@ func (this *config) getLocalIPSets() map[string][]string {
 			if !strings.HasSuffix(file.Name(), ".ipset") {
 				continue
 			}
-			if strings.HasPrefix(file.Name(), boundIpsetAllow) ||
-				strings.HasPrefix(file.Name(), boundIpsetDeny) {
-				continue
+			for _, set := range this.setList {
+				if strings.HasPrefix(file.Name(), set.name) {
+					continue
+				}
 			}
 			name := path.Join(this.ipsetDir, file.Name())
 			if data, e := ioutil.ReadFile(name); e == nil {
 				// create ipset
 				v := ipset{name: file.Name(), ipList: make([]*net.IPNet, 0)}
 				for _, ip := range splitLines(data) {
-					cidr := path2ipnet(ip)
-					if cidr != nil {
+					_,cidr,e := net.ParseCIDR(strings.TrimSpace(ip))
+					if e == nil {
 						v.ipList = append(v.ipList, cidr)
 					}
 				}

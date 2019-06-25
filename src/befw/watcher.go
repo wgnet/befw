@@ -84,8 +84,9 @@ func (this *config) startFileWatcher() {
 func consulUpdateWatchers(state *state) {
 	// 1. create array of keys we need for this run
 	keys := []string{"localServices", "befw/$alias$"}
-	keys = append(keys, state.generateKVPaths("rules_allow")...)
-	keys = append(keys, state.generateKVPaths("rules_deny")...)
+	for _, set := range state.config.setList {
+		keys = append(keys, state.generateKVPaths(set.name)...)
+	}
 	for _, s := range state.nodeServices {
 		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
 	}

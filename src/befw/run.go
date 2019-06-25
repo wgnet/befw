@@ -36,11 +36,23 @@ func restoreStatus() {
 }
 
 func startService(configFile string) {
-	defer restoreStatus()
+	if ConfigurationRunning != DebugConfiguration {
+		defer restoreStatus()
+	}
+	var errorCounts = 0
 	for {
 		s, e := refresh(configFile)
 		if e != nil {
-			LogWarning("Error while refresh():", e)
+			errorCounts += 1
+			if errorCounts > 10 {
+				errorCounts = 10 // maximum of 5 minutes
+			}
+			sleepTime := errorCounts * 40
+			LogWarning("Error while refresh():", e, "; sleeping for ", sleepTime, " seconds")
+			time.Sleep(time.Duration(sleepTime) * time.Second)
+			continue
+		} else {
+			errorCounts = 0 // reset
 		}
 		if s != nil {
 			sleepIfNoChanges(s)

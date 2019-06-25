@@ -31,8 +31,7 @@ type IptablesRules struct {
 	Header string `json:"header"`
 	Footer string `json:"footer"`
 	Line   string `json:"rule_service"`
-	Allow  string `json:"rule_allow"`
-	Deny   string `json:"rule_deny"`
+	Static string `json:"static_set"`
 }
 
 func defaultRules() *IptablesRules {
@@ -40,8 +39,7 @@ func defaultRules() *IptablesRules {
 		Header: iptablesRulesHeader,
 		Footer: iptablesRulesFooter,
 		Line:   iptablesRulesLine,
-		Allow:  iptablesRulesAllow,
-		Deny:   iptablesRulesDeny,
+		Static: iptablesStaticSet,
 	}
 }
 func (this *config) newRules() *IptablesRules {
@@ -57,30 +55,28 @@ func (this *config) newRules() *IptablesRules {
 }
 
 func (this *state) generateRules() string {
-	rules := this.config.	newRules()
+	rules := this.config.newRules()
 	result := new(strings.Builder)
 	replacer1 := strings.NewReplacer("{DATE}", time.Now().String())
 	replacer1.WriteString(result, rules.Header)
-	if _, ok := this.ipsets[boundIpsetAllow]; ok {
-		result.WriteString(rules.Allow)
-	}
-	if _, ok := this.ipsets[boundIpsetDeny]; ok {
-		result.WriteString(rules.Deny)
+	for _, set := range this.config.setList {
+		if _, ok := this.ipsets[set.name]; ok {
+			strings.NewReplacer(
+				"{NAME}", set.name, "{PRIORITY}", strconv.Itoa(set.priority), "{TARGET}", set.target).WriteString(result, rules.Static)
+		}
 	}
 	for _, serv := range this.nodeServices {
 		if this.ipsets[serv.ServiceName] != nil {
-			replacer2 := strings.NewReplacer(
+			strings.NewReplacer(
 				"{NAME}", cutIPSet(serv.ServiceName),
 				"{PORT}", strconv.Itoa(int(serv.ServicePort)),
-				"{PROTO}", string(serv.ServiceProtocol))
-			replacer2.WriteString(result, rules.Line)
+				"{PROTO}", string(serv.ServiceProtocol)).WriteString(result, rules.Line)
 			if serv.ServicePorts != nil {
 				for _, port := range serv.ServicePorts {
-					replacer3 := strings.NewReplacer(
+					strings.NewReplacer(
 						"{NAME}", cutIPSet(serv.ServiceName),
 						"{PORT}", strconv.Itoa(int(port.Port)),
-						"{PROTO}", string(port.PortProto))
-					replacer3.WriteString(result, rules.Line)
+						"{PROTO}", string(port.PortProto)).WriteString(result, rules.Line)
 				}
 			}
 		}

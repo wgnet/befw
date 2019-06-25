@@ -19,10 +19,32 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hashicorp/consul/api"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 )
+
+type state struct {
+	consulClient *api.Client
+	nodeName     string
+	nodeDC       string
+	nodeServices []service
+	ipsets       map[string][]string
+	lastUpdated  time.Time
+	config       *config
+}
+
+type ipset struct {
+	name   string
+	ipList []*net.IPNet
+}
+
+type staticIPSetConf struct {
+	name     string
+	priority int
+	target   string
+}
 
 func newState(configFile string) *state {
 	var e error
@@ -158,8 +180,8 @@ func (this *state) generateState() error {
 		for _, path := range paths {
 			pairs, _, e := this.consulClient.KV().List(path, &q)
 			if e != nil {
-				LogWarning("Can't obtain data from kv:", path, e.Error())
-				continue
+				// error - consul unavailable, go out
+				return e
 			}
 			for _, kvp := range pairs {
 				if isAlias(kvp, path) {
@@ -287,19 +309,26 @@ func (this *state) generateKVPaths(newServiceName string) []string {
 
 func (this *state) getAllowDenyIpsets() {
 	q := api.QueryOptions{Datacenter: this.config.consulDC}
-	for _, boundIpset := range []string{boundIpsetAllow, boundIpsetDeny} {
-		for _, path := range this.generateKVPaths(boundIpset) {
+	for _, set := range this.config.setList {
+		for _, path := range this.generateKVPaths(set.name) {
 			pairs, _, e := this.consulClient.KV().List(path, &q)
 			if e != nil {
 				LogWarning("Can't obtain data from kv:", path, e.Error())
 				continue
 			}
 			for _, kvp := range pairs {
-				if newClient, e := kv2ServiceClient(kvp); e == nil {
-					newClient.appendToIpsetIf(&this.ipsets, boundIpset)
+				if isAlias(kvp, path) {
+					for _, newClient := range this.getAlias(kvp, path) {
+						newClient.appendToIpsetIf(&this.ipsets, set.name)
+					}
 				} else {
-					LogWarning("Can't add pre-defined ipset", boundIpset, e.Error())
+					if newClient, e := kv2ServiceClient(kvp); e == nil {
+						newClient.appendToIpsetIf(&this.ipsets, set.name)
+					} else {
+						LogWarning("Can't add pre-defined ipset", set, e.Error())
+					}
 				}
+
 			}
 		}
 	}

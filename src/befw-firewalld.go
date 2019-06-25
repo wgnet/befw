@@ -22,7 +22,6 @@ import (
 import "./befw"
 
 func main() {
-	defer panicRecovery()
 	debug := flag.Bool("debug", false, "StartService with debug configuration")
 	nonflog := flag.Bool("nonflog", false, "Disable NF Logging")
 	noroot := flag.Bool("noroot", false, "Allow run service as non-root user")
@@ -32,6 +31,8 @@ func main() {
 
 	if *debug {
 		befw.ConfigurationRunning = befw.DebugConfiguration
+	} else {
+		defer panicRecovery()
 	}
 
 	befw.WatchTimeout = *timeout
@@ -43,5 +44,4 @@ func main() {
 		befw.LogInfo("NFLogger started, you can get information from /var/run/befw/*")
 	}
 	befw.StartService(*config)
-
 }

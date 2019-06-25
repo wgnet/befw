@@ -20,16 +20,8 @@ const (
 	staticServicesPath string = "/etc/befw.service.d"
 	staticRulesPath    string = "/etc/befw.rules.json"
 	aclDatacenter             = "consul"
-	iptablesRulesDeny         = `
-# RULE_ALLOW
--A BEFW -m set --set rules_deny src -j ACCEPT
-#/RULE_ALLOW`
-	iptablesRulesAllow = `
-# RULE_ALLOW
--A BEFW -m set --set rules_allow src -j ACCEPT
-#/RULE_ALLOW
-`
-	iptablesRulesLine = `
+	iptablesStaticSet = `-I BEFW {PRIORITY} -m set --match-set {NAME} src -j {TARGET}`
+	iptablesRulesLine         = `
 # {NAME}
 -A BEFW -p {PROTO} --dport {PORT} -m set --set {NAME} src -j ACCEPT
 -A BEFW -p {PROTO} --dport {PORT} -j DROP
@@ -45,11 +37,22 @@ COMMIT
 :BEFW - [0:0]
 -F BEFW
 `
-	boundIpsetAllow = "rules_allow"
-	boundIpsetDeny  = "rules_deny"
-	packageName     = "befw-firewalld"
-	consulAddress   = "127.0.0.1:8500"
+	packageName   = "befw-firewalld"
+	consulAddress = "127.0.0.1:8500"
 )
+
+var staticIPSetList = []staticIPSetConf{
+	{
+		name:     "rules_allow",
+		priority: 1,
+		target:   "ACCEPT",
+	},
+	{
+		name:     "rules_deny",
+		priority: 2,
+		target:   "REJECT",
+	},
+}
 
 const (
 	ipprotoTcp befwServiceProto = "tcp"

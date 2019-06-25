@@ -17,9 +17,57 @@ package befw
 
 import (
 	"bufio"
+	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 )
+
+type config struct {
+	consulAddr  string
+	consulDC    string
+	consulToken string
+	servicesDir string
+	ipsetDir    string
+	rulesPath   string
+	setList     []staticIPSetConf
+}
+
+type befwServiceProto string
+
+type RefreshMethod int8
+
+type serviceClient struct {
+	clientCIDR   *net.IPNet
+	clientExpiry int64
+}
+
+type service struct {
+	ServiceName     string           `json:"name"`
+	ServiceProtocol befwServiceProto `json:"protocol"`
+	ServicePort     uint16           `json:"port"`
+	ServicePorts    []port           `json:"ports"`
+	serviceClients  []serviceClient
+}
+
+type port struct {
+	Port      int              `json:"port"`
+	PortProto befwServiceProto `json:"protocol"`
+}
+
+func (self *service) toString() string {
+	s := new(strings.Builder)
+	s.WriteString(fmt.Sprintf("Service %s, port %d/%s", self.ServiceName, self.ServicePort, self.ServiceProtocol))
+	for _, p := range self.ServicePorts {
+		s.WriteString(p.toString())
+	}
+	return s.String()
+}
+
+func (self *port) toString() string {
+	return fmt.Sprintf("%d/%s", self.Port, self.PortProto)
+}
 
 func createConfig(configFile string) *config {
 	ret := &config{
@@ -29,6 +77,7 @@ func createConfig(configFile string) *config {
 		ipsetDir:    staticIpsetPath,
 		servicesDir: staticServicesPath,
 		rulesPath:   staticRulesPath,
+		setList:     staticIPSetList, // default, TODO: make a config
 	}
 	kv := make(map[string]string)
 	if configFile == "" {
@@ -69,6 +118,27 @@ func createConfig(configFile string) *config {
 		}
 		if _, ok := kv["fail"]; ok {
 			LogError("[Config] you must edit your config file before proceed")
+		}
+		n := 3
+		for k, v := range kv {
+			if strings.HasPrefix(k, "set.") {
+				set := staticIPSetConf{name: strings.TrimPrefix(k, "set.")}
+				v0 := strings.Split(v, ";")
+				if len(v0) == 1 {
+					set.priority = n
+					set.target = v0[0]
+				} else {
+					if n, e := strconv.Atoi(v0[0]); e == nil {
+						set.priority = n
+						set.target = v0[1]
+					} else {
+						continue
+					}
+				}
+				LogDebug("New local set: ", set.name)
+				ret.setList = append(ret.setList, set)
+				n += 1
+			}
 		}
 	}
 	return ret
