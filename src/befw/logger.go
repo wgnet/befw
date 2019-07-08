@@ -26,7 +26,7 @@ var syslogWriter *syslog.Writer = nil
 func logMessageSyslog(level syslog.Priority, message ...interface{}) {
 	if syslogWriter == nil {
 		var e error
-		if syslogWriter, e = syslog.New(syslog.LOG_INFO, packageName); e != nil {
+		if syslogWriter, e = syslog.New(syslog.LOG_DAEMON|syslog.LOG_INFO, packageName); e != nil {
 			logMessageStdout(level, message...)
 			return
 		}
