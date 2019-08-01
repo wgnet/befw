@@ -20,3 +20,22 @@ import "testing"
 func TestState(t *testing.T) {
 
 }
+
+func TestGenerateKVPaths(t *testing.T) {
+	s1 := &state{
+		nodeDC:   "ed",
+		nodeName: "ed-sl-a126",
+	}
+	p1 := s1.generateKVPaths("test")
+	s2 := &state{
+		nodeDC:   "ed",
+		nodeName: "ed-sl-a126.be.core.pw",
+	}
+	p2 := s2.generateKVPaths("test")
+	if len(p1) != 3 {
+		t.Error("Len != 3 in p1")
+	}
+	if len(p2) != 4 {
+		t.Error("Len != 4 in p2")
+	}
+}

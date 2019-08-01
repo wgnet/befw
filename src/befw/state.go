@@ -300,11 +300,15 @@ func kv2ServiceClient(pair *api.KVPair) (serviceClient, error) {
 }
 
 func (this *state) generateKVPaths(newServiceName string) []string {
-	return []string{
+	ret := []string{
 		fmt.Sprintf("befw/%s/%s/%s/", this.nodeDC, this.nodeName, newServiceName),
 		fmt.Sprintf("befw/%s/%s/", this.nodeDC, newServiceName),
 		fmt.Sprintf("befw/%s/", newServiceName),
 	}
+	if idx := strings.Index(this.nodeName, "."); idx > 0 {
+		ret = append(ret, fmt.Sprintf("befw/%s/%s/%s/", this.nodeDC, this.nodeName[:idx], newServiceName))
+	}
+	return ret
 }
 
 func (this *state) getAllowDenyIpsets() {

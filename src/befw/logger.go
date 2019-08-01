@@ -35,16 +35,13 @@ func logMessageSyslog(level syslog.Priority, message ...interface{}) {
 	switch level {
 	case syslog.LOG_DEBUG:
 		if ConfigurationRunning == DebugConfiguration {
-			syslogWriter.Info(m)
+			syslogWriter.Debug(m)
 		}
 		break
 	case syslog.LOG_INFO:
 		syslogWriter.Info(m)
 		break
-	case syslog.LOG_ERR:
-	case syslog.LOG_ALERT:
-	case syslog.LOG_CRIT:
-	case syslog.LOG_EMERG:
+	case syslog.LOG_ERR, syslog.LOG_ALERT, syslog.LOG_CRIT, syslog.LOG_EMERG:
 		syslogWriter.Err(m)
 		break
 	case syslog.LOG_WARNING:

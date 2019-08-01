@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -29,7 +30,13 @@ func (this *syncConfig) requestPuppetDB() []*syncData {
 	var response *http.Response
 	var e error
 	ret := make([]*syncData, 0)
-	if response, e = this.httpClient.Get(this.url); e != nil {
+	req, e := http.NewRequest("GET", this.url, nil)
+	if e != nil {
+		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
+		return ret
+	}
+	req.Header.Set("Connection", "close")
+	if response, e = this.httpClient.Do(req); e != nil {
 		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
 		return ret
 	}
@@ -48,18 +55,50 @@ func (this *syncConfig) requestPuppetDB() []*syncData {
 			return ret
 		}
 	}
+	toSort := make([]string, 0)
 	for _, value := range result {
 		if _, ok := value["parameters"]; ok {
 			if paramsMap, ok := value["parameters"].(map[string]interface{}); ok {
 				if message, ok := paramsMap["message"]; ok {
 					if stringMessage, ok := message.(string); ok {
-						if newElem := this.newSyncData(stringMessage); newElem != nil {
-							ret = append(ret, newElem)
-						}
+						toSort = append(toSort, stringMessage)
 					}
 				}
 			}
 		}
+	}
+	sort.Strings(toSort)
+	isEqual := true
+	if this.lastCounter < 360 {
+		if this.lastResult != nil {
+			if len(toSort) == len(this.lastResult) {
+				for i, _ := range toSort {
+					if toSort[i] != this.lastResult[i] {
+						isEqual = false
+						break
+					}
+				}
+			} else {
+				isEqual = false
+			}
+		} else {
+			isEqual = false
+		}
+	} else {
+		isEqual = false
+	}
+	this.lastResult = make([]string, len(toSort))
+	copy(this.lastResult, toSort)
+	if !isEqual {
+		this.lastCounter = 0
+		for _, stringMessage := range toSort {
+			if newElem := this.newSyncData(stringMessage); newElem != nil {
+				ret = append(ret, newElem)
+			}
+		}
+	} else {
+		this.lastCounter++
+		befw.LogDebug("Nothing changed, skipping update")
 	}
 	return ret
 }

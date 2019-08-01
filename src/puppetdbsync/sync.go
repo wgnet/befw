@@ -33,6 +33,9 @@ func newSync(config string) *syncConfig {
 		services:      make(map[string]int64),
 		servicesMutex: new(sync.RWMutex),
 		servicesWG:    new(sync.WaitGroup),
+		lastResult:    make([]string, 0),
+		lastCounter:   0,
+		timeout:       10 * time.Second, //default
 	}
 	if x, e := os.Stat(config); e != nil {
 		befw.LogError("[Syncer] Can't get config from ", config, ": ", e.Error())
@@ -151,7 +154,9 @@ func (this *syncConfig) writeSyncData(data *syncData) {
 	defer this.servicesWG.Done()
 	path := fmt.Sprintf("%s/%s", data.service, data.value)
 	if data.node != "" {
-		path = fmt.Sprintf("%s/%s", data.node, path)
+		//
+		nodeShortHostName := data.node[:strings.Index(data.node, ".")]
+		path = fmt.Sprintf("%s/%s", nodeShortHostName, path)
 	}
 	if data.dc != "" {
 		path = fmt.Sprintf("%s/%s", data.dc, path)

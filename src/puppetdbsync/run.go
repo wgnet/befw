@@ -28,8 +28,9 @@ var canRunMutex = sync.RWMutex{}
 
 var exitChan = make(chan bool, 10)
 
-func Run(config string) {
+func Run(config string, timeout time.Duration) {
 	syncConfig := newSync(config)
+	syncConfig.timeout = timeout
 	go makeCache(syncConfig)
 	go keepLock(syncConfig)
 	sigChan := make(chan os.Signal, 1)
@@ -56,7 +57,7 @@ func Run(config string) {
 		select {
 		case <-exitChan:
 			return
-		case <-time.After(10 * time.Second):
+		case <-time.After(syncConfig.timeout):
 			continue
 		}
 	}
@@ -68,7 +69,7 @@ func makeCache(config *syncConfig) {
 		select {
 		case <-exitChan:
 			return
-		case <-time.After(10 * time.Second):
+		case <-time.After(config.timeout):
 			continue
 		}
 	}
@@ -82,7 +83,7 @@ func keepLock(config *syncConfig) {
 		select {
 		case <-exitChan:
 			return
-		case <-time.After(10 * time.Second):
+		case <-time.After(config.timeout):
 			continue
 		}
 	}

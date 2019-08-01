@@ -61,6 +61,9 @@ func (this *state) generateRules() string {
 	replacer1.WriteString(result, rules.Header)
 	for _, set := range this.config.setList {
 		if _, ok := this.ipsets[set.name]; ok {
+			if set.target == "NOOP" {
+				continue
+			}
 			strings.NewReplacer(
 				"{NAME}", set.name, "{PRIORITY}", strconv.Itoa(set.priority), "{TARGET}", set.target).WriteString(result, rules.Static)
 		}
@@ -152,6 +155,13 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	ipset.WriteString(fmt.Sprintln("create", tmpIpsetName, "hash:net"))
 	ipset.WriteString(fmt.Sprintln("flush", tmpIpsetName))
 	for _, cidr := range cidrList {
+		// TODO: more accurate fix
+		if cidr == "0.0.0.0/0" {
+			LogWarning("[Rules] we will replace 0.0.0.0/0 as it's an ipset limitation")
+			ipset.WriteString(fmt.Sprintln("add", tmpIpsetName, "0.0.0.0/1"))
+			ipset.WriteString(fmt.Sprintln("add", tmpIpsetName, "128.0.0.0/1"))
+			continue
+		}
 		ipset.WriteString(fmt.Sprintln("add", tmpIpsetName, cidr))
 	}
 	ipset.WriteString(fmt.Sprintln("swap", tmpIpsetName, ipsetName))

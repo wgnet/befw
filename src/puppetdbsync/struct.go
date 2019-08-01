@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/consul/api"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type syncConfig struct {
@@ -33,10 +34,13 @@ type syncConfig struct {
 	httpClient    *http.Client
 	consulClient  *api.Client
 	cache         *hotCache
+	lastResult    []string
+	lastCounter   int
 	cacheMutex    *sync.RWMutex
 	services      map[string]int64
 	servicesMutex *sync.RWMutex
 	servicesWG    *sync.WaitGroup
+	timeout       time.Duration
 }
 
 type syncData struct {
