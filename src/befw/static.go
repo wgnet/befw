@@ -25,6 +25,8 @@ import (
 	"strings"
 )
 
+var BEFWRegexp = regexp.MustCompile("^befw/\\S+/(?:[\\d\\.]{7,15}(?:/\\d{1,2})?|\\$\\S+\\$)$")
+
 func filterStrings(filterFunc func(string) bool, array []string) []string {
 	result := make([]string, 0)
 	for _, elem := range array {
@@ -42,22 +44,22 @@ func splitLines(data []byte) []string {
 
 func (this *config) getLocalIPSets() map[string][]string {
 	result := make(map[string][]string)
-	if files, e := ioutil.ReadDir(this.ipsetDir); e == nil {
+	if files, e := ioutil.ReadDir(this.IPSetDir); e == nil {
 		for _, file := range files {
 			if !strings.HasSuffix(file.Name(), ".ipset") {
 				continue
 			}
-			for _, set := range this.setList {
-				if strings.HasPrefix(file.Name(), set.name) {
+			for _, set := range this.StaticSetList {
+				if strings.HasPrefix(file.Name(), set.Name) {
 					continue
 				}
 			}
-			name := path.Join(this.ipsetDir, file.Name())
+			name := path.Join(this.IPSetDir, file.Name())
 			if data, e := ioutil.ReadFile(name); e == nil {
 				// create ipset
 				v := ipset{name: file.Name(), ipList: make([]*net.IPNet, 0)}
 				for _, ip := range splitLines(data) {
-					_,cidr,e := net.ParseCIDR(strings.TrimSpace(ip))
+					_, cidr, e := net.ParseCIDR(strings.TrimSpace(ip))
 					if e == nil {
 						v.ipList = append(v.ipList, cidr)
 					}
@@ -71,10 +73,16 @@ func (this *config) getLocalIPSets() map[string][]string {
 
 var ipNetRegexp *regexp.Regexp
 
-func path2ipnet(path string) *net.IPNet {
+func path2ipnet(path string) (r *net.IPNet) {
 	if ipNetRegexp == nil {
 		ipNetRegexp = regexp.MustCompile("^befw/.*/(\\d+\\.\\d+\\.\\d+\\.\\d+)(?:/(\\d{1,2}))?$")
 	}
+	defer func() {
+		if e := recover(); e != nil {
+			LogWarning("Error while running on '", path, "'", e)
+			r = nil
+		}
+	}()
 	parts := ipNetRegexp.FindStringSubmatch(path)[1:]
 	if parts == nil {
 		return nil
@@ -92,12 +100,12 @@ func path2ipnet(path string) *net.IPNet {
 
 func (this *config) getLocalServices() []service {
 	result := make([]service, 0)
-	if files, e := ioutil.ReadDir(this.servicesDir); e == nil {
+	if files, e := ioutil.ReadDir(this.ServicesDir); e == nil {
 		for _, file := range files {
 			if !strings.HasSuffix(file.Name(), ".json") {
 				continue
 			}
-			name := path.Join(this.servicesDir, file.Name())
+			name := path.Join(this.ServicesDir, file.Name())
 			if data, e := ioutil.ReadFile(name); e == nil {
 				var v service
 				if e := json.Unmarshal(data, &v); e != nil {

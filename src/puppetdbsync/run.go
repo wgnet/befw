@@ -16,6 +16,7 @@
 package puppetdbsync
 
 import (
+	"../befw"
 	"os"
 	"os/signal"
 	"sync"
@@ -26,7 +27,7 @@ import (
 var canRun = false
 var canRunMutex = sync.RWMutex{}
 
-var exitChan = make(chan bool, 10)
+var exitChan = make(chan bool)
 
 func Run(config string, timeout time.Duration) {
 	syncConfig := newSync(config)
@@ -37,13 +38,14 @@ func Run(config string, timeout time.Duration) {
 	go func() {
 		select {
 		case <-sigChan:
-			for i := 0; i < 10; i++ {
-				exitChan <- true
-			}
-			syncConfig.cleanup()
+			exitChan <- true
+			exitChan <- true
+			exitChan <- true
+			exitChan <- true
 		}
 	}() // wait for signal
-	signal.Notify(sigChan, syscall.SIGKILL, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGKILL, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go runWipe(syncConfig)
 	for {
 		canRunMutex.RLock()
 		if canRun {
@@ -56,6 +58,7 @@ func Run(config string, timeout time.Duration) {
 		canRunMutex.RUnlock()
 		select {
 		case <-exitChan:
+			befw.LogDebug("[Syncer] mainRun exiting...")
 			return
 		case <-time.After(syncConfig.timeout):
 			continue
@@ -68,6 +71,7 @@ func makeCache(config *syncConfig) {
 		config.makeHotCache()
 		select {
 		case <-exitChan:
+			befw.LogDebug("[Syncer] cacheMaker exiting...")
 			return
 		case <-time.After(config.timeout):
 			continue
@@ -82,8 +86,9 @@ func keepLock(config *syncConfig) {
 		canRunMutex.Unlock()
 		select {
 		case <-exitChan:
+			befw.LogDebug("[Syncer] lockKeeper exiting...")
 			return
-		case <-time.After(config.timeout):
+		case <-time.After(29 * time.Second):
 			continue
 		}
 	}

@@ -36,6 +36,11 @@ type serviceUnknownClient struct {
 var serviceClients = make(map[string]*serviceUnknownClient)
 var serviceClientsLock = new(sync.RWMutex)
 
+var serviceNil = &serviceUnknownClient{
+	service: nil,
+	clients: make(map[string]int),
+}
+
 func (this *service) registerNflog() {
 	serviceClientsLock.Lock()
 	defer serviceClientsLock.Unlock()
@@ -60,7 +65,7 @@ func findServiceByPort(port uint16, protocol befwServiceProto) *serviceUnknownCl
 			}
 		}
 	}
-	return nil
+	return serviceNil
 }
 
 func nflogCallback(payload *nflog.Payload) int {
@@ -144,6 +149,21 @@ func syncData() { // client function
 			break // skip
 		}
 	}
+	if len(serviceNil.clients) > 0 {
+		filename := path.Join(befwState, befwNillService)
+		os.Remove(filename)
+		if fd, e := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644); e == nil {
+			fmt.Fprintf(fd, "Service: NILL\nProtocol: ANY\nPort: ANY\nTotal missing: %d\n\n",
+				len(serviceNil.clients))
+			for ip, num := range serviceNil.clients {
+				fmt.Fprintf(fd, " * %s - %d packets\n", ip, num)
+			}
+			fd.Close()
+		} else {
+			LogWarning("[NF] Can't write data to", filename, ":", e.Error())
+		}
+
+	}
 	LogInfo("[NF] Services stats have been written")
 
 }
@@ -155,6 +175,9 @@ func cleanupMissing() {
 		for i, _ := range v.clients {
 			delete(v.clients, i)
 		}
+	}
+	for i, _ := range serviceNil.clients {
+		delete(serviceNil.clients, i)
 	}
 	LogInfo("[NF] Services stats have been wiped")
 }

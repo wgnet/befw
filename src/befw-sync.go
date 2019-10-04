@@ -17,6 +17,7 @@ package main
 
 import (
 	"flag"
+	"os"
 	"time"
 )
 import "./befw"
@@ -32,5 +33,11 @@ func main() {
 	} else {
 		defer panicRecovery()
 	}
+
+	go func() {
+		time.Sleep(24 * time.Hour)
+		os.Exit(0)
+	}()
+
 	puppetdbsync.Run(*config, *timeout)
 }

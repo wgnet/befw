@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 )
@@ -39,6 +40,8 @@ func startService(configFile string) {
 	if ConfigurationRunning != DebugConfiguration {
 		defer restoreStatus()
 	}
+	os.MkdirAll(befwState, 0755)
+	startChecker()
 	var errorCounts = 0
 	for {
 		s, e := refresh(configFile)
@@ -59,6 +62,7 @@ func startService(configFile string) {
 		}
 	}
 }
+
 func StartService(configFile string) {
 	go startAPIServer()
 	for {
@@ -66,11 +70,19 @@ func StartService(configFile string) {
 	}
 }
 
+func startChecker() {
+	go func() {
+		for {
+			checkIsConsistent()
+			time.Sleep(3 * time.Second)
+		}
+	}()
+}
 func GenerateConfigs() string {
 	rules := defaultRules()
 	data, err := json.MarshalIndent(&rules, "", " ")
 	if err != nil {
-		LogError("Can't marshall default config rules")
+		LogError("Can't marshall default Config rules")
 	}
 	return string(data)
 }

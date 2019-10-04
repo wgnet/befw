@@ -29,10 +29,10 @@ type state struct {
 	consulClient *api.Client
 	nodeName     string
 	nodeDC       string
-	nodeServices []service
-	ipsets       map[string][]string
+	NodeServices []service
+	IPSets       map[string][]string
 	lastUpdated  time.Time
-	config       *config
+	Config       *config
 }
 
 type ipset struct {
@@ -41,18 +41,19 @@ type ipset struct {
 }
 
 type staticIPSetConf struct {
-	name     string
-	priority int
-	target   string
+	Name     string
+	Priority int
+	Target   string
 }
 
 func newState(configFile string) *state {
 	var e error
 	cfg := createConfig(configFile)
+	cfg.createStaticIPSets() // before any
 	state := new(state)
-	state.config = cfg
+	state.Config = cfg
 	config := api.DefaultConfig()
-	config.Address = cfg.consulAddr
+	config.Address = cfg.ConsulAddr
 	state.consulClient, e = api.NewClient(config)
 	if e != nil {
 		LogError("Can't create consul client. Error ", e.Error())
@@ -63,14 +64,14 @@ func newState(configFile string) *state {
 		state.nodeDC = self["Config"]["Datacenter"].(string)
 		state.nodeName = self["Config"]["NodeName"].(string)
 	}
-	state.nodeServices = make([]service, 0)
+	state.NodeServices = make([]service, 0)
 	return state
 }
 
 // do a refactoring
 
-func (this *state) modifyLocalState() {
-	localServices := this.config.getLocalServices()
+func (state *state) modifyLocalState() {
+	localServices := state.Config.getLocalServices()
 	keys := make(map[string]*service)
 	for idx, localService := range localServices {
 		v := api.AgentServiceRegistration{
@@ -83,7 +84,7 @@ func (this *state) modifyLocalState() {
 				v.Tags = append(v.Tags, p.toString())
 			}
 		}
-		if e := this.consulClient.Agent().ServiceRegister(&v); e != nil {
+		if e := state.consulClient.Agent().ServiceRegister(&v); e != nil {
 			LogWarning(fmt.Sprintf("Can't register service %s @ %d/%s: %s",
 				localService.ServiceName,
 				localService.ServicePort,
@@ -95,7 +96,7 @@ func (this *state) modifyLocalState() {
 		}
 	}
 	// now deregister all 'local' services we has not
-	if services, e := this.consulClient.Agent().Services(); e == nil {
+	if services, e := state.consulClient.Agent().Services(); e == nil {
 		for key, consulService := range services {
 			l, b := inArray(consulService.Tags, "local"), inArray(consulService.Tags, "befw")
 			if !(l && b) { // non-local service
@@ -109,7 +110,7 @@ func (this *state) modifyLocalState() {
 			}
 			if sv, ok := keys[key]; !ok || !(sv.ServicePort == uint16(consulService.Port) && sv.ServiceProtocol == proto) {
 				// deregister if has not same service
-				if e := this.consulClient.Agent().ServiceDeregister(key); e == nil {
+				if e := state.consulClient.Agent().ServiceDeregister(key); e == nil {
 					LogInfo(fmt.Sprintf("Deregistering non-existing local service %s @ %d/%s", key, consulService.Port, proto))
 				} else {
 					LogWarning("Can't deregister local service ", key, ". Error: ", e.Error())
@@ -147,12 +148,12 @@ func fromTags(tags []string) []port {
 	return result
 }
 
-func (this *state) generateState() error {
-	this.ipsets = this.config.getLocalIPSets()
-	this.nodeServices = make([]service, 0)
+func (state *state) generateState() error {
+	state.IPSets = state.Config.getLocalIPSets()
+	state.NodeServices = make([]service, 0)
 	// download dynamic from consul
 	// 2 download all services
-	registeredServices, e := this.consulClient.Agent().Services()
+	registeredServices, e := state.consulClient.Agent().Services()
 	if e != nil {
 		LogError("Can't download services information", e.Error())
 		return e
@@ -168,24 +169,27 @@ func (this *state) generateState() error {
 			serviceClients:  make([]serviceClient, 0),
 			ServicePorts:    fromTags(serviceData.Tags),
 		}
-		// XXX: register BEFORE new service name
+		// XXX: register BEFORE new service Name
 		newService.registerNflog()
 		newServiceName := transform(&newService)
-		this.ipsets[newServiceName] = make([]string, 0) // empty? ok!
+		state.IPSets[newServiceName] = make([]string, 0) // empty? ok!
 		newService.ServiceName = newServiceName
-		paths := this.generateKVPaths(newServiceName)
+		paths := state.generateKVPaths(newServiceName)
 
 		// create ipset-newServiceName
-		q := api.QueryOptions{Datacenter: this.config.consulDC}
+		q := api.QueryOptions{Datacenter: state.Config.ConsulDC}
 		for _, path := range paths {
-			pairs, _, e := this.consulClient.KV().List(path, &q)
+			pairs, _, e := state.consulClient.KV().List(path, &q)
 			if e != nil {
 				// error - consul unavailable, go out
 				return e
 			}
 			for _, kvp := range pairs {
+				if !BEFWRegexp.MatchString(kvp.Key) {
+					continue // do not fucking try
+				}
 				if isAlias(kvp, path) {
-					newService.serviceClients = append(newService.serviceClients, this.getAlias(kvp, path)...)
+					newService.serviceClients = append(newService.serviceClients, state.getAlias(kvp, path)...)
 				} else {
 					if kvp.Value == nil {
 						continue
@@ -198,35 +202,61 @@ func (this *state) generateState() error {
 				}
 			}
 		}
-		this.nodeServices = append(this.nodeServices, newService)
+		state.NodeServices = append(state.NodeServices, newService)
 	}
 	// 3 ok let's append
-	this.getAllowDenyIpsets()
-	this.generateIPSets()
+	state.getAllowDenyIpsets()
+	state.generateIPSets()
 	return nil
 }
 
-func (this *state) applyState() error {
+func (state *state) applyState() error {
+	lastContentLock.Lock()
+	defer lastContentLock.Unlock()
+	// begin old rules cleanup
+	for k := range lastIPSetContent {
+		delete(lastIPSetContent, k)
+	}
+	lastIPTablesContent = ""
+	// end old rules cleanup
+
 	// 4 we have to apply IPSET's and remove all unused
-	for name, set := range this.ipsets {
+	for name, set := range state.IPSets {
 		if y, e := applyIPSet(name, set); e != nil {
 			LogWarning("Error while creating ipset", name, e.Error())
+			return e
 		} else if !y {
 			LogWarning("create_ipset returned false", name)
+			return errors.New("create_ipset returned false")
 		}
 	}
 	// 5. generate iptables rules
-	if e := applyRules(this.generateRules()); e != nil {
+	if e := applyRules(state.generateRules()); e != nil {
 		return e
 	}
 	// looks like we're ok
-	LogInfo("BEFW refresh done:", len(this.nodeServices), "services,", len(this.ipsets), "ipsets")
+	LogInfo("BEFW refresh done: ", len(state.NodeServices), "services, ", len(state.IPSets), "IPSets")
 	return nil
 
 }
 
-func refresh(configFile string) (*state, error) {
-	state := newState(configFile)
+func refresh(configFile string) (retState *state, retError error) {
+	var state *state
+	if ConfigurationRunning != DebugConfiguration {
+		defer func() {
+			if e := recover(); e != nil {
+				LogWarning("[BEFW] Recovering from error: ", e)
+				state = recoverLastState(configFile)
+				err := state.applyState()
+				if err != nil {
+					LogWarning("[BEFW] Error recovering last state: ", err.Error())
+				}
+				retState = state
+				retError = errors.New("recovered from panic")
+			}
+		}()
+	}
+	state = newState(configFile)
 	state.modifyLocalState()
 	if err := state.generateState(); err != nil {
 		LogWarning("Can't refresh state: ", err.Error())
@@ -236,7 +266,7 @@ func refresh(configFile string) (*state, error) {
 		LogWarning("Can't apply state: ", err.Error())
 		return state, err
 	}
-
+	state.saveLastState() // always
 	return state, nil
 }
 
@@ -249,8 +279,8 @@ func showState(configFile string) (data map[string][]string, e error) {
 		e = err
 		return
 	}
-	for _, srv := range state.nodeServices {
-		data[srv.ServiceName] = state.ipsets[srv.ServiceName]
+	for _, srv := range state.NodeServices {
+		data[srv.ServiceName] = state.IPSets[srv.ServiceName]
 		data["*NodeName"] = []string{state.nodeName}
 		data["*NodeDC"] = []string{state.nodeDC}
 	}
@@ -266,12 +296,12 @@ func isAlias(pair *api.KVPair, path string) bool {
 	return false
 }
 
-func (this *state) getAlias(pair *api.KVPair, path string) []serviceClient {
+func (state *state) getAlias(pair *api.KVPair, path string) []serviceClient {
 	aliasName := strings.Replace(pair.Key, path, "", 1)
-	q := api.QueryOptions{Datacenter: this.config.consulDC}
+	q := api.QueryOptions{Datacenter: state.Config.ConsulDC}
 	path = fmt.Sprintf("befw/$alias$/%s/", aliasName)
 	res := make([]serviceClient, 0)
-	if pairs, _, e := this.consulClient.KV().List(path, &q); e == nil {
+	if pairs, _, e := state.consulClient.KV().List(path, &q); e == nil {
 		for _, kvp := range pairs {
 			if kvp.Value == nil {
 				continue
@@ -299,35 +329,36 @@ func kv2ServiceClient(pair *api.KVPair) (serviceClient, error) {
 	return result, nil
 }
 
-func (this *state) generateKVPaths(newServiceName string) []string {
+func (state *state) generateKVPaths(newServiceName string) []string {
 	ret := []string{
-		fmt.Sprintf("befw/%s/%s/%s/", this.nodeDC, this.nodeName, newServiceName),
-		fmt.Sprintf("befw/%s/%s/", this.nodeDC, newServiceName),
+		fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName, newServiceName),
+		fmt.Sprintf("befw/%s/%s/", state.nodeDC, newServiceName),
 		fmt.Sprintf("befw/%s/", newServiceName),
 	}
-	if idx := strings.Index(this.nodeName, "."); idx > 0 {
-		ret = append(ret, fmt.Sprintf("befw/%s/%s/%s/", this.nodeDC, this.nodeName[:idx], newServiceName))
+	if idx := strings.Index(state.nodeName, "."); idx > 0 {
+		ret = append(ret, fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName[:idx], newServiceName))
 	}
 	return ret
 }
 
-func (this *state) getAllowDenyIpsets() {
-	q := api.QueryOptions{Datacenter: this.config.consulDC}
-	for _, set := range this.config.setList {
-		for _, path := range this.generateKVPaths(set.name) {
-			pairs, _, e := this.consulClient.KV().List(path, &q)
+func (state *state) getAllowDenyIpsets() {
+	q := api.QueryOptions{Datacenter: state.Config.ConsulDC}
+	for _, set := range state.Config.StaticSetList {
+		state.IPSets[set.Name] = make([]string, 0) // empty? ok!
+		for _, path := range state.generateKVPaths(set.Name) {
+			pairs, _, e := state.consulClient.KV().List(path, &q)
 			if e != nil {
 				LogWarning("Can't obtain data from kv:", path, e.Error())
 				continue
 			}
 			for _, kvp := range pairs {
 				if isAlias(kvp, path) {
-					for _, newClient := range this.getAlias(kvp, path) {
-						newClient.appendToIpsetIf(&this.ipsets, set.name)
+					for _, newClient := range state.getAlias(kvp, path) {
+						newClient.appendToIpsetIf(&state.IPSets, set.Name)
 					}
 				} else {
 					if newClient, e := kv2ServiceClient(kvp); e == nil {
-						newClient.appendToIpsetIf(&this.ipsets, set.name)
+						newClient.appendToIpsetIf(&state.IPSets, set.Name)
 					} else {
 						LogWarning("Can't add pre-defined ipset", set, e.Error())
 					}
@@ -354,10 +385,10 @@ func (this *serviceClient) isExpired() bool {
 	return true
 }
 
-func (this *state) generateIPSets() {
-	for _, localService := range this.nodeServices {
+func (state *state) generateIPSets() {
+	for _, localService := range state.NodeServices {
 		for _, c := range localService.serviceClients {
-			c.appendToIpsetIf(&this.ipsets, localService.ServiceName)
+			c.appendToIpsetIf(&state.IPSets, localService.ServiceName)
 		}
 	}
 }
@@ -419,7 +450,7 @@ func RegisterService(configFile, name, protocol string, port int) error {
 	if services, e := state.consulClient.Agent().Services(); e == nil {
 		for k, v := range services {
 			if name == k {
-				return errors.New("this name already exists")
+				return errors.New("this Name already exists")
 			}
 			var proto befwServiceProto
 			if inArray(v.Tags, "udp") {
@@ -428,7 +459,7 @@ func RegisterService(configFile, name, protocol string, port int) error {
 				proto = ipprotoTcp
 			}
 			if port == v.Port && string(proto) == protocol {
-				return errors.New(fmt.Sprintf("this port/protocol pair already exists with name %s", k))
+				return errors.New(fmt.Sprintf("this port/protocol pair already exists with Name %s", k))
 			}
 		}
 		if e := state.consulClient.Agent().ServiceRegister(&api.AgentServiceRegistration{

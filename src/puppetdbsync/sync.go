@@ -107,51 +107,51 @@ func newSync(config string) *syncConfig {
 	return conf
 }
 
-func (this *syncConfig) makeHotCache() {
-	if this.cache == nil { // first time
-		this.cache = new(hotCache)
-		this.cache.dcs = make(map[string]interface{})
-		this.cache.nodes = make(map[string]interface{})
-		this.cacheMutex = new(sync.RWMutex)
+func (conf *syncConfig) makeHotCache() {
+	if conf.cache == nil { // first time
+		conf.cache = new(hotCache)
+		conf.cache.dcs = make(map[string]interface{})
+		conf.cache.nodes = make(map[string]interface{})
+		conf.cacheMutex = new(sync.RWMutex)
 	}
-	this.cache.error = false
-	this.cacheMutex.Lock()
-	defer this.cacheMutex.Unlock()
-	if dcs, e := this.consulClient.Catalog().Datacenters(); e != nil {
-		this.cache.error = true
+	conf.cache.error = false
+	conf.cacheMutex.Lock()
+	defer conf.cacheMutex.Unlock()
+	if dcs, e := conf.consulClient.Catalog().Datacenters(); e != nil {
+		conf.cache.error = true
 		return
 	} else {
-		for dc, _ := range this.cache.dcs {
-			delete(this.cache.dcs, dc)
+		for dc, _ := range conf.cache.dcs {
+			delete(conf.cache.dcs, dc)
 		}
 		for _, dc := range dcs {
-			this.cache.dcs[dc] = nil
+			conf.cache.dcs[dc] = nil
 		}
 	}
-	for node, _ := range this.cache.nodes {
-		delete(this.cache.nodes, node)
+	for node, _ := range conf.cache.nodes {
+		delete(conf.cache.nodes, node)
 	}
-	for dc, _ := range this.cache.dcs {
+	for dc, _ := range conf.cache.dcs {
 		q := &api.QueryOptions{
 			Datacenter: dc,
 		}
-		if nodes, _, e := this.consulClient.Catalog().Nodes(q); e != nil {
-			this.cache.error = true
+		if nodes, _, e := conf.consulClient.Catalog().Nodes(q); e != nil {
+			conf.cache.error = true
 			return
 		} else {
 			for _, node := range nodes {
-				this.cache.nodes[dc+"@"+node.Node] = nil
+				conf.cache.nodes[dc+"@"+node.Node] = nil
 			}
 		}
 	}
-	befw.LogInfo(fmt.Sprintf("[Syncer] Cache updated: %d datacenters, %d nodes",
-		len(this.cache.dcs), len(this.cache.nodes)))
+	befw.LogDebug(fmt.Sprintf("[Syncer] Cache updated: %d datacenters, %d nodes",
+		len(conf.cache.dcs), len(conf.cache.nodes)))
 }
 
-func (this *syncConfig) writeSyncData(data *syncData) {
-	this.servicesMutex.Lock()
-	defer this.servicesMutex.Unlock()
-	defer this.servicesWG.Done()
+func (conf *syncConfig) writeSyncData(data *syncData) {
+	conf.servicesMutex.Lock()
+	defer conf.servicesMutex.Unlock()
+	defer conf.servicesWG.Done()
 	path := fmt.Sprintf("%s/%s", data.service, data.value)
 	if data.node != "" {
 		//
@@ -164,55 +164,55 @@ func (this *syncConfig) writeSyncData(data *syncData) {
 	path = fmt.Sprintf("befw/%s", path)
 	value := time.Now().Unix() + 1209600 // 2 weeks
 
-	if v, ok := this.services[path]; !(ok && v > time.Now().Unix()) {
-		_, e := this.consulClient.KV().Put(&api.KVPair{
+	if v, ok := conf.services[path]; !(ok && v > time.Now().Unix()) {
+		_, e := conf.consulClient.KV().Put(&api.KVPair{
 			Key:   path,
 			Value: []byte(fmt.Sprintf("%d", value)),
 		}, nil)
 		if e != nil {
 			befw.LogWarning("[Syncer] can't write data to KV: ", path, ":", e.Error())
 		}
-		this.services[path] = value
+		conf.services[path] = value
 		befw.LogInfo("[Syncer] wrote ", path, "to KV with value ", value)
 	}
 }
 
-func (this *syncConfig) manageSession() {
-	nodeName := fmt.Sprintf("%s.%s", this.consulDC, this.nodeName)
+func (conf *syncConfig) manageSession() {
+	nodeName := fmt.Sprintf("%s.%s", conf.consulDC, conf.nodeName)
 	// 1. register main node
-	this.consulClient.Catalog().Register(&api.CatalogRegistration{
+	conf.consulClient.Catalog().Register(&api.CatalogRegistration{
 		Node:           nodeName,
-		Address:        this.nodeAddr,
-		Datacenter:     this.consulDC,
+		Address:        conf.nodeAddr,
+		Datacenter:     conf.consulDC,
 		SkipNodeUpdate: true,
 	}, nil)
-	if this.sessionID == "" {
-		if sess, _, e := this.consulClient.Session().CreateNoChecks(
+	if conf.sessionID == "" {
+		if sess, _, e := conf.consulClient.Session().CreateNoChecks(
 			&api.SessionEntry{
 				Node: nodeName,
 				Name: "befw-sync",
 				TTL:  "30s",
 			}, nil); e == nil {
-			this.sessionID = sess
+			conf.sessionID = sess
 		}
 	} else {
-		if se, _, e := this.consulClient.Session().Info(this.sessionID, nil); e != nil || se == nil {
-			befw.LogWarning("[Syncer] Can't find session:", this.sessionID)
-			this.sessionID = ""
-			this.manageSession() // a bit recursive
+		if se, _, e := conf.consulClient.Session().Info(conf.sessionID, nil); e != nil || se == nil {
+			befw.LogDebug("[Syncer] Can't find session:", conf.sessionID)
+			conf.sessionID = ""
+			conf.manageSession() // a bit recursive
 		} else {
-			this.consulClient.Session().Renew(this.sessionID, nil)
+			conf.consulClient.Session().Renew(conf.sessionID, nil)
 		}
 	}
 }
 
-func (this *syncConfig) manageSessionLock() bool {
-	this.manageSession()
-	if this.sessionID != "" {
-		if v, _, e := this.consulClient.KV().Acquire(
+func (conf *syncConfig) manageSessionLock() bool {
+	conf.manageSession()
+	if conf.sessionID != "" {
+		if v, _, e := conf.consulClient.KV().Acquire(
 			&api.KVPair{Key: "befw/.lock",
 				Value:   []byte("ok"),
-				Session: this.sessionID,
+				Session: conf.sessionID,
 			}, nil); e != nil {
 			befw.LogWarning("[Syncer] Can't create lock:", e.Error())
 			return false
@@ -223,12 +223,12 @@ func (this *syncConfig) manageSessionLock() bool {
 	return false
 }
 
-func (this *syncConfig) cleanup() {
-	nodeName := fmt.Sprintf("%s.%s", this.consulDC, this.nodeName)
-	this.consulClient.Catalog().Deregister(&api.CatalogDeregistration{
+func (conf *syncConfig) cleanup() {
+	nodeName := fmt.Sprintf("%s.%s", conf.consulDC, conf.nodeName)
+	conf.consulClient.Catalog().Deregister(&api.CatalogDeregistration{
 		Node:       nodeName,
-		Address:    this.nodeAddr,
-		Datacenter: this.consulDC,
+		Address:    conf.nodeAddr,
+		Datacenter: conf.consulDC,
 	}, nil)
 
 }

@@ -25,13 +25,13 @@ import (
 )
 
 type config struct {
-	consulAddr  string
-	consulDC    string
-	consulToken string
-	servicesDir string
-	ipsetDir    string
-	rulesPath   string
-	setList     []staticIPSetConf
+	ConsulAddr    string
+	ConsulDC      string
+	ConsulToken   string
+	ServicesDir   string
+	IPSetDir      string
+	RulesPath     string
+	StaticSetList []staticIPSetConf
 }
 
 type befwServiceProto string
@@ -44,7 +44,7 @@ type serviceClient struct {
 }
 
 type service struct {
-	ServiceName     string           `json:"name"`
+	ServiceName     string           `json:"Name"`
 	ServiceProtocol befwServiceProto `json:"protocol"`
 	ServicePort     uint16           `json:"port"`
 	ServicePorts    []port           `json:"ports"`
@@ -71,13 +71,13 @@ func (self *port) toString() string {
 
 func createConfig(configFile string) *config {
 	ret := &config{
-		consulAddr:  consulAddress,
-		consulDC:    aclDatacenter,
-		consulToken: "",
-		ipsetDir:    staticIpsetPath,
-		servicesDir: staticServicesPath,
-		rulesPath:   staticRulesPath,
-		setList:     staticIPSetList, // default, TODO: make a config
+		ConsulAddr:    consulAddress,
+		ConsulDC:      aclDatacenter,
+		ConsulToken:   "",
+		IPSetDir:      staticIpsetPath,
+		ServicesDir:   staticServicesPath,
+		RulesPath:     staticRulesPath,
+		StaticSetList: staticIPSetList, // default, TODO: make a Config
 	}
 	kv := make(map[string]string)
 	if configFile == "" {
@@ -99,44 +99,44 @@ func createConfig(configFile string) *config {
 			}
 		}
 		if v, ok := kv["address"]; ok {
-			ret.consulAddr = v
+			ret.ConsulAddr = v
 		}
 		if v, ok := kv["dc"]; ok {
-			ret.consulDC = v
+			ret.ConsulDC = v
 		}
 		if v, ok := kv["token"]; ok {
-			ret.consulToken = v
+			ret.ConsulToken = v
 		}
-		if v, ok := kv["ipsets"]; ok {
-			ret.ipsetDir = v
+		if v, ok := kv["IPSets"]; ok {
+			ret.IPSetDir = v
 		}
 		if v, ok := kv["services"]; ok {
-			ret.servicesDir = v
+			ret.ServicesDir = v
 		}
 		if v, ok := kv["rules"]; ok {
-			ret.rulesPath = v
+			ret.RulesPath = v
 		}
 		if _, ok := kv["fail"]; ok {
-			LogError("[Config] you must edit your config file before proceed")
+			LogError("[Config] you must edit your Config file before proceed")
 		}
 		n := 3
 		for k, v := range kv {
 			if strings.HasPrefix(k, "set.") {
-				set := staticIPSetConf{name: strings.TrimPrefix(k, "set.")}
+				set := staticIPSetConf{Name: strings.TrimPrefix(k, "set.")}
 				v0 := strings.Split(v, ";")
 				if len(v0) == 1 {
-					set.priority = n
-					set.target = v0[0]
+					set.Priority = n
+					set.Target = v0[0]
 				} else {
 					if n, e := strconv.Atoi(v0[0]); e == nil {
-						set.priority = n
-						set.target = v0[1]
+						set.Priority = n
+						set.Target = v0[1]
 					} else {
 						continue
 					}
 				}
-				LogDebug("New local set: ", set.name)
-				ret.setList = append(ret.setList, set)
+				LogDebug("New local set: ", set.Name)
+				ret.StaticSetList = append(ret.StaticSetList, set)
 				n += 1
 			}
 		}

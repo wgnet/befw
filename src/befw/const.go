@@ -20,7 +20,8 @@ const (
 	staticServicesPath string = "/etc/befw.service.d"
 	staticRulesPath    string = "/etc/befw.rules.json"
 	aclDatacenter             = "consul"
-	iptablesStaticSet = `-I BEFW {PRIORITY} -m set --match-set {NAME} src -j {TARGET}`
+	iptablesStaticSet         = `-I BEFW {PRIORITY} -m set --match-set {NAME} src -j {TARGET}
+`
 	iptablesRulesLine         = `
 # {NAME}
 -A BEFW -p {PROTO} --dport {PORT} -m set --set {NAME} src -j ACCEPT
@@ -43,14 +44,14 @@ COMMIT
 
 var staticIPSetList = []staticIPSetConf{
 	{
-		name:     "rules_allow",
-		priority: 1,
-		target:   "ACCEPT",
+		Name:     "rules_allow",
+		Priority: 1,
+		Target:   "ACCEPT",
 	},
 	{
-		name:     "rules_deny",
-		priority: 2,
-		target:   "REJECT",
+		Name:     "rules_deny",
+		Priority: 2,
+		Target:   "REJECT",
 	},
 }
 
@@ -67,5 +68,8 @@ const (
 const befwNFQueue = 402 // ord(befw)
 const befwState = "/var/run/befw"
 const befwStateSocket = "/var/run/befw/api.sock"
+
+const befwStateBin = "/var/run/befw/state.bin"
+const befwNillService = "anyother.service"
 
 var ConfigurationRunning int = ProductionConfiguration

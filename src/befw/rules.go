@@ -16,6 +16,7 @@
 package befw
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -44,32 +46,37 @@ func defaultRules() *IptablesRules {
 }
 func (this *config) newRules() *IptablesRules {
 	rules := defaultRules()
-	if data, e := ioutil.ReadFile(this.rulesPath); e != nil {
-		LogWarning("[Rules] Can't read", this.rulesPath, "; using default:", e.Error())
+	if data, e := ioutil.ReadFile(this.RulesPath); e != nil {
+		LogWarning("[Rules] Can't read", this.RulesPath, "; using default:", e.Error())
 	} else {
 		if e := json.Unmarshal(data, rules); e != nil {
-			LogWarning("[Rules] Can't parse", this.rulesPath, "; using default:", e.Error())
+			LogWarning("[Rules] Can't parse", this.RulesPath, "; using default:", e.Error())
 		}
 	}
 	return rules
 }
 
-func (this *state) generateRules() string {
-	rules := this.config.newRules()
+var lastIPSetContent = make(map[string]string)
+var lastIPTablesContent string
+var lastAppliedRules string
+var lastContentLock sync.Mutex
+
+func (state *state) generateRules() string {
+	rules := state.Config.newRules()
 	result := new(strings.Builder)
 	replacer1 := strings.NewReplacer("{DATE}", time.Now().String())
 	replacer1.WriteString(result, rules.Header)
-	for _, set := range this.config.setList {
-		if _, ok := this.ipsets[set.name]; ok {
-			if set.target == "NOOP" {
+	for _, set := range state.Config.StaticSetList {
+		if _, ok := state.IPSets[set.Name]; ok {
+			if set.Target == "NOOP" {
 				continue
 			}
 			strings.NewReplacer(
-				"{NAME}", set.name, "{PRIORITY}", strconv.Itoa(set.priority), "{TARGET}", set.target).WriteString(result, rules.Static)
+				"{NAME}", set.Name, "{PRIORITY}", strconv.Itoa(set.Priority), "{TARGET}", set.Target).WriteString(result, rules.Static)
 		}
 	}
-	for _, serv := range this.nodeServices {
-		if this.ipsets[serv.ServiceName] != nil {
+	for _, serv := range state.NodeServices {
+		if state.IPSets[serv.ServiceName] != nil {
 			strings.NewReplacer(
 				"{NAME}", cutIPSet(serv.ServiceName),
 				"{PORT}", strconv.Itoa(int(serv.ServicePort)),
@@ -103,6 +110,14 @@ func applyRules(rules string) error {
 		}
 		return errors.New(stdout.String())
 	}
+	// save it now
+	stdout.Reset()
+	cmd = exec.Command("/usr/sbin/iptables", "-S", "BEFW")
+	cmd.Stdout = stdout
+	if e := cmd.Run(); e == nil {
+		lastIPTablesContent = stdout.String()
+	}
+	lastAppliedRules = rules
 	return nil
 }
 
@@ -144,10 +159,11 @@ func cutIPSet(ipsetName string) string {
 		return ipsetName
 	}
 }
+
 func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	ipset := new(strings.Builder)
 	if ipsetName == "" {
-		return false, errors.New("ipset name eq ''")
+		return false, errors.New("ipset Name eq ''")
 	}
 	ipsetName = cutIPSet(ipsetName)
 	tmpIpsetName := fmt.Sprintf("tmp-%s", getRandomString())
@@ -180,6 +196,90 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 		}
 		return false, errors.New(stdout.String())
 	}
+	// do fill check
+	stdout.Reset()
+	cmd = exec.Command("/usr/sbin/ipset", "-o", "save", "list", ipsetName)
+	cmd.Stdout = stdout
+	if e := cmd.Run(); e == nil {
+		lastIPSetContent[ipsetName] = stdout.String()
+	}
 	return true, nil
 
+}
+
+func checkRulesIsConsistent() bool {
+	if lastIPTablesContent != "" {
+		stdout := new(strings.Builder)
+		stdout.Reset()
+		cmd := exec.Command("/usr/sbin/iptables", "-S", "BEFW")
+		cmd.Stdout = stdout
+		if e := cmd.Run(); e == nil {
+			return lastIPTablesContent == stdout.String()
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+func checkIpsetIsConsistent() bool {
+	for ipsetName := range lastIPSetContent {
+		stdout := new(strings.Builder)
+		stdout.Reset()
+		cmd := exec.Command("/usr/sbin/ipset", "-o", "save", "list", ipsetName)
+		cmd.Stdout = stdout
+		if e := cmd.Run(); e == nil {
+			if lastIPSetContent[ipsetName] != stdout.String() {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+func restoreLastRules() {
+	if lastAppliedRules != "" {
+		applyRules(lastAppliedRules)
+	}
+}
+
+func restoreLastIPSet() {
+	for ipsetName := range lastIPSetContent {
+		stdin := strings.NewReader(lastIPSetContent[ipsetName])
+		cmd := exec.Command("/usr/sbin/ipset", "restore", "-exist")
+		cmd.Stdin = stdin
+		if e := cmd.Run(); e != nil {
+		}
+
+	}
+}
+
+func checkIsConsistent() {
+	lastContentLock.Lock()
+	defer lastContentLock.Unlock()
+	if !checkIpsetIsConsistent() {
+		LogWarning("[Consist] ipset content was changed, going to restore")
+		restoreLastIPSet()
+		return
+	}
+	if !checkRulesIsConsistent() {
+		LogWarning("[Consist] iptables content was changed, going to restore")
+		restoreLastRules()
+		return
+	}
+}
+
+func (conf *config) createStaticIPSets() {
+	var b bytes.Buffer
+	for _, staticSet := range conf.StaticSetList {
+		b.WriteString(fmt.Sprintf("create %s hash:net\n", staticSet.Name))
+	}
+	cmd := exec.Command("/usr/sbin/ipset", "restore", "-exist")
+	cmd.Stdin = &b
+	if e := cmd.Run(); e != nil {
+		LogWarning("[Consist] can't create static ipsets")
+		return
+	}
 }

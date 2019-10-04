@@ -26,17 +26,17 @@ import (
 	"strings"
 )
 
-func (this *syncConfig) requestPuppetDB() []*syncData {
+func (conf *syncConfig) requestPuppetDB() []*syncData {
 	var response *http.Response
 	var e error
 	ret := make([]*syncData, 0)
-	req, e := http.NewRequest("GET", this.url, nil)
+	req, e := http.NewRequest("GET", conf.url, nil)
 	if e != nil {
 		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
 		return ret
 	}
 	req.Header.Set("Connection", "close")
-	if response, e = this.httpClient.Do(req); e != nil {
+	if response, e = conf.httpClient.Do(req); e != nil {
 		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
 		return ret
 	}
@@ -69,11 +69,11 @@ func (this *syncConfig) requestPuppetDB() []*syncData {
 	}
 	sort.Strings(toSort)
 	isEqual := true
-	if this.lastCounter < 360 {
-		if this.lastResult != nil {
-			if len(toSort) == len(this.lastResult) {
+	if conf.lastCounter < 360 {
+		if conf.lastResult != nil {
+			if len(toSort) == len(conf.lastResult) {
 				for i, _ := range toSort {
-					if toSort[i] != this.lastResult[i] {
+					if toSort[i] != conf.lastResult[i] {
 						isEqual = false
 						break
 					}
@@ -87,25 +87,25 @@ func (this *syncConfig) requestPuppetDB() []*syncData {
 	} else {
 		isEqual = false
 	}
-	this.lastResult = make([]string, len(toSort))
-	copy(this.lastResult, toSort)
+	conf.lastResult = make([]string, len(toSort))
+	copy(conf.lastResult, toSort)
 	if !isEqual {
-		this.lastCounter = 0
+		conf.lastCounter = 0
 		for _, stringMessage := range toSort {
-			if newElem := this.newSyncData(stringMessage); newElem != nil {
+			if newElem := conf.newSyncData(stringMessage); newElem != nil {
 				ret = append(ret, newElem)
 			}
 		}
 	} else {
-		this.lastCounter++
+		conf.lastCounter++
 		befw.LogDebug("Nothing changed, skipping update")
 	}
 	return ret
 }
 
-func (this *syncConfig) validate(data *syncData) bool {
-	this.cacheMutex.RLock()
-	defer this.cacheMutex.RUnlock()
+func (conf *syncConfig) validate(data *syncData) bool {
+	conf.cacheMutex.RLock()
+	defer conf.cacheMutex.RUnlock()
 	var sOk, dOk, nOk, vOk bool
 	if strings.HasPrefix(data.value, "$") && strings.HasSuffix(data.value, "$") {
 		vOk = true
@@ -128,27 +128,27 @@ func (this *syncConfig) validate(data *syncData) bool {
 	if data.dc == "" {
 		dOk = true
 	} else {
-		if _, ok := this.cache.dcs[data.dc]; ok {
+		if _, ok := conf.cache.dcs[data.dc]; ok {
 			dOk = true
 		}
-		if this.cache.error {
+		if conf.cache.error {
 			dOk = true
 		}
 	}
 	if data.node == "" {
 		nOk = true
 	} else {
-		if _, ok := this.cache.nodes[data.dc+"@"+data.node]; ok {
+		if _, ok := conf.cache.nodes[data.dc+"@"+data.node]; ok {
 			nOk = true
 		}
-		if this.cache.error {
+		if conf.cache.error {
 			nOk = true
 		}
 	}
 	return sOk && dOk && nOk && vOk
 }
 
-func (this *syncConfig) newSyncData(message string) *syncData {
+func (conf *syncConfig) newSyncData(message string) *syncData {
 	ret := new(syncData)
 	if strings.IndexByte(message, '@') < 0 {
 		return nil
@@ -173,7 +173,7 @@ func (this *syncConfig) newSyncData(message string) *syncData {
 	default:
 		return nil
 	}
-	if this.validate(ret) {
+	if conf.validate(ret) {
 		return ret
 	}
 	return nil

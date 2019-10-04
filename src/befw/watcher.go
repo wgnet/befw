@@ -33,7 +33,7 @@ var watcherStarted = false
 
 func sleepIfNoChanges(state *state) {
 	if !watcherStarted {
-		state.config.startFileWatcher()
+		state.Config.startFileWatcher()
 		watcherStarted = true
 	}
 	consulUpdateWatchers(state)
@@ -61,33 +61,33 @@ func cleanupChannel() {
 
 func (this *config) startFileWatcher() {
 
-	if err := notify.Watch(this.ipsetDir, notifyChannel, notify.Remove, notify.Write);
+	if err := notify.Watch(this.IPSetDir, notifyChannel, notify.Remove, notify.Write);
 		err != nil {
 		LogWarning(err)
 	} else {
-		LogInfo("[Watcher] Start watching", this.ipsetDir)
+		LogInfo("[Watcher] Start watching", this.IPSetDir)
 	}
-	if err := notify.Watch(this.rulesPath, notifyChannel, notify.All);
+	if err := notify.Watch(this.RulesPath, notifyChannel, notify.All);
 		err != nil {
 		LogWarning(err)
 	} else {
-		LogInfo("[Watcher] Start watching", this.rulesPath)
+		LogInfo("[Watcher] Start watching", this.RulesPath)
 	}
-	if err := notify.Watch(this.servicesDir, notifyChannel, notify.Write, notify.Remove);
+	if err := notify.Watch(this.ServicesDir, notifyChannel, notify.Write, notify.Remove);
 		err != nil {
 		LogWarning(err)
 	} else {
-		LogInfo("[Watcher] Start watching", this.servicesDir)
+		LogInfo("[Watcher] Start watching", this.ServicesDir)
 	}
 }
 
 func consulUpdateWatchers(state *state) {
 	// 1. create array of keys we need for this run
 	keys := []string{"localServices", "befw/$alias$"}
-	for _, set := range state.config.setList {
-		keys = append(keys, state.generateKVPaths(set.name)...)
+	for _, set := range state.Config.StaticSetList {
+		keys = append(keys, state.generateKVPaths(set.Name)...)
 	}
-	for _, s := range state.nodeServices {
+	for _, s := range state.NodeServices {
 		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
 	}
 	sort.Strings(keys)
@@ -166,7 +166,7 @@ func watchLocalServices(state *state, chanExit chan bool) {
 
 func watchKVStore(path string, state *state, chanExit chan bool) {
 	var s_idx uint64 = 0
-	if l, m, e := state.consulClient.KV().List(path, &api.QueryOptions{Datacenter: state.config.consulDC,}); e == nil {
+	if l, m, e := state.consulClient.KV().List(path, &api.QueryOptions{Datacenter: state.Config.ConsulDC,}); e == nil {
 		if len(l) != 0 {
 			s_idx = m.LastIndex
 		}
@@ -179,7 +179,7 @@ func watchKVStore(path string, state *state, chanExit chan bool) {
 		case <-time.After(defaultDieTimeout):
 			break
 		}
-		q := &api.QueryOptions{Datacenter: state.config.consulDC,
+		q := &api.QueryOptions{Datacenter: state.Config.ConsulDC,
 			WaitTime: defaultDieTimeout, WaitIndex: s_idx}
 		if l, m, e := state.consulClient.KV().List(path, q); e == nil {
 			if len(l) == 0 {

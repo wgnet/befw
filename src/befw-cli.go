@@ -81,7 +81,7 @@ func help(args []string) error {
 
 func register(args []string) error {
 	if args[0] == "help" || len(args) != 4 {
-		fmt.Printf("Usage: %s add <service name> <protocol> <port>\n", os.Args[0])
+		fmt.Printf("Usage: %s register <service name> <protocol> <port>\n", os.Args[0])
 		fmt.Printf("Registers service on local consul agent\n")
 		return nil
 	}
