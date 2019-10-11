@@ -154,6 +154,9 @@ func (conf *syncConfig) newSyncData(message string) *syncData {
 		return nil
 	}
 	elems := strings.Split(message, "@")
+	for i := 0; i < len(elems); i++ {
+		elems[i] = strings.ToLower(elems[i]) // tolower
+	}
 	switch len(elems) {
 	case 2:
 		ret.service = elems[0]
@@ -172,6 +175,9 @@ func (conf *syncConfig) newSyncData(message string) *syncData {
 		break
 	default:
 		return nil
+	}
+	if ret.node != "" {
+		ret.node = strings.Split(ret.node, ".")[0] // remove ..xxx
 	}
 	if conf.validate(ret) {
 		return ret

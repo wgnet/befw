@@ -148,7 +148,7 @@ func cutIPSet(ipsetName string) string {
 	if len(ipsetName) > 31 { // max size of links
 		parts := strings.Split(ipsetName, "_")
 		leftLength := 31 - len(parts[len(parts)-1]) // we can't reduce last part
-		maxPartLen := int((leftLength/(len(parts)-1) - 1))
+		maxPartLen := int(leftLength/(len(parts)-1) - 1)
 		for i := 0; i < len(parts)-1; i++ {
 			if len(parts[i]) > maxPartLen {
 				parts[i] = string([]byte(parts[i])[0:maxPartLen]) // trim to size

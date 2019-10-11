@@ -1,3 +1,19 @@
+### 0.1.3
+- befw now checks if its rules is consistent
+- befw now can recover firewall access if consul is dead with a hard-coded ( TOTO: configured ) networks
+
+### 0.1.2
+- fix 0.0.0.0/0 centos7 ipset bug
+- befw-sync now wipes old records
+- documentation fixes
+- befw-sync timeouts & races fixed
+
+### 0.1.1
+- Uses short hostnames instead of FQDN
+- Additional sleep(s) if errors repeat
+- Fix ipset refresh
+- Fix static ipset aliases
+
 ### 0.1.0
 - a huge documentation update
 - befw-firewalld now supports configuration file

@@ -61,8 +61,18 @@ func newState(configFile string) *state {
 	if self, e := state.consulClient.Agent().Self(); e != nil {
 		LogError("Can't connect to consul cluster. Error:", e.Error())
 	} else {
-		state.nodeDC = self["Config"]["Datacenter"].(string)
-		state.nodeName = self["Config"]["NodeName"].(string)
+		if cfg.NodeDC != "" {
+			state.nodeDC = cfg.NodeDC
+		} else {
+			state.nodeDC = self["Config"]["Datacenter"].(string)
+		}
+		if cfg.NodeName != "" {
+			state.nodeName = cfg.NodeName
+		} else {
+			state.nodeName = self["Config"]["NodeName"].(string)
+		}
+		state.nodeDC = strings.ToLower(state.nodeDC)
+		state.nodeName = strings.ToLower(strings.Split(state.nodeName, ".")[0])
 	}
 	state.NodeServices = make([]service, 0)
 	return state
@@ -334,9 +344,6 @@ func (state *state) generateKVPaths(newServiceName string) []string {
 		fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName, newServiceName),
 		fmt.Sprintf("befw/%s/%s/", state.nodeDC, newServiceName),
 		fmt.Sprintf("befw/%s/", newServiceName),
-	}
-	if idx := strings.Index(state.nodeName, "."); idx > 0 {
-		ret = append(ret, fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName[:idx], newServiceName))
 	}
 	return ret
 }

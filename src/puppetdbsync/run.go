@@ -83,6 +83,11 @@ func keepLock(config *syncConfig) {
 	for {
 		canRunMutex.Lock()
 		canRun = config.manageSessionLock()
+		if lastState != canRun {
+			config.lastCounter = 999
+			befw.LogInfo("[Syncer] We got lock - refreshing puppetdb")
+		}
+		lastState = canRun // state changed
 		canRunMutex.Unlock()
 		select {
 		case <-exitChan:

@@ -27,6 +27,8 @@ import (
 type config struct {
 	ConsulAddr    string
 	ConsulDC      string
+	NodeName      string
+	NodeDC        string
 	ConsulToken   string
 	ServicesDir   string
 	IPSetDir      string
@@ -44,7 +46,7 @@ type serviceClient struct {
 }
 
 type service struct {
-	ServiceName     string           `json:"Name"`
+	ServiceName     string           `json:"name"`
 	ServiceProtocol befwServiceProto `json:"protocol"`
 	ServicePort     uint16           `json:"port"`
 	ServicePorts    []port           `json:"ports"`
@@ -115,6 +117,12 @@ func createConfig(configFile string) *config {
 		}
 		if v, ok := kv["rules"]; ok {
 			ret.RulesPath = v
+		}
+		if v, ok := kv["nodename"]; ok {
+			ret.NodeName = v
+		}
+		if v, ok := kv["nodedc"]; ok {
+			ret.NodeDC = v
 		}
 		if _, ok := kv["fail"]; ok {
 			LogError("[Config] you must edit your Config file before proceed")

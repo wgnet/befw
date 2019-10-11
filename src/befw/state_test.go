@@ -35,7 +35,7 @@ func TestGenerateKVPaths(t *testing.T) {
 	if len(p1) != 3 {
 		t.Error("Len != 3 in p1")
 	}
-	if len(p2) != 4 {
-		t.Error("Len != 4 in p2")
+	if len(p2) != 3 {
+		t.Error("Len != 3 in p2")
 	}
 }
