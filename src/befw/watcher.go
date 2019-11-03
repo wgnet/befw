@@ -26,7 +26,7 @@ import (
 var notifyChannel = make(chan notify.EventInfo, 100)
 var watchers = make(map[string]chan bool)
 
-var WatchTimeout = 30 * time.Minute
+var WatchTimeout = 10 * time.Minute
 var defaultDieTimeout = 10 * time.Second
 
 var watcherStarted = false
@@ -39,6 +39,12 @@ func sleepIfNoChanges(state *state) {
 	consulUpdateWatchers(state)
 	select {
 	case <-notifyChannel:
+		// wait for next minute to get commitment index
+//		sleep := 60 - time.Now().Second()
+//		if sleep < 5 {
+//			sleep = 60 + sleep
+//		}
+//		time.Sleep(time.Duration(sleep) * time.Second)
 		break
 	case <-time.After(WatchTimeout):
 		break
@@ -65,19 +71,19 @@ func (this *config) startFileWatcher() {
 		err != nil {
 		LogWarning(err)
 	} else {
-		LogInfo("[Watcher] Start watching", this.IPSetDir)
+		LogDebug("[Watcher] Start watching", this.IPSetDir)
 	}
 	if err := notify.Watch(this.RulesPath, notifyChannel, notify.All);
 		err != nil {
 		LogWarning(err)
 	} else {
-		LogInfo("[Watcher] Start watching", this.RulesPath)
+		LogDebug("[Watcher] Start watching", this.RulesPath)
 	}
 	if err := notify.Watch(this.ServicesDir, notifyChannel, notify.Write, notify.Remove);
 		err != nil {
 		LogWarning(err)
 	} else {
-		LogInfo("[Watcher] Start watching", this.ServicesDir)
+		LogDebug("[Watcher] Start watching", this.ServicesDir)
 	}
 }
 
@@ -85,7 +91,7 @@ func consulUpdateWatchers(state *state) {
 	// 1. create array of keys we need for this run
 	keys := []string{"localServices", "befw/$alias$"}
 	for _, set := range state.Config.StaticSetList {
-		keys = append(keys, state.generateKVPaths(set.Name)...)
+		keys = append(keys, state.generateIPSetKVPaths(set.Name)...)
 	}
 	for _, s := range state.NodeServices {
 		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
@@ -104,7 +110,7 @@ func consulUpdateWatchers(state *state) {
 		if !in_keys(k) {
 			watchers[k] <- true
 			delete(watchers, k)
-			LogInfo("[Watcher] Watch key", k, "deleted from watch list")
+			LogDebug("[Watcher] Watch key", k, "deleted from watch list")
 		}
 	}
 	// 3. create new chan & watch services
@@ -113,7 +119,7 @@ func consulUpdateWatchers(state *state) {
 			continue
 		}
 		watchers[k] = make(chan bool, 1)
-		LogInfo("[Watcher] Watch key", k, "added to watch list")
+		LogDebug("[Watcher] Watch key", k, "added to watch list")
 		if k == "localServices" {
 			go watchLocalServices(state, watchers[k])
 		} else {

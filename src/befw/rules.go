@@ -201,7 +201,7 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	cmd = exec.Command("/usr/sbin/ipset", "-o", "save", "list", ipsetName)
 	cmd.Stdout = stdout
 	if e := cmd.Run(); e == nil {
-		lastIPSetContent[ipsetName] = stdout.String()
+    lastIPSetContent[ipsetName] = stdout.String()
 	}
 	return true, nil
 
@@ -247,7 +247,8 @@ func restoreLastRules() {
 
 func restoreLastIPSet() {
 	for ipsetName := range lastIPSetContent {
-		stdin := strings.NewReader(lastIPSetContent[ipsetName])
+    state := strings.Split(lastIPSetContent[ipsetName], "\n")
+		stdin := strings.NewReader(strings.Join(append(state[:1], append([]string{fmt.Sprintf("flush %s", ipsetName)}, state[2:]...)...), "\n"))
 		cmd := exec.Command("/usr/sbin/ipset", "restore", "-exist")
 		cmd.Stdin = stdin
 		if e := cmd.Run(); e != nil {

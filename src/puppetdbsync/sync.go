@@ -160,7 +160,7 @@ func (conf *syncConfig) writeSyncData(data *syncData) {
 	if data.dc != "" {
 		path = fmt.Sprintf("%s/%s", data.dc, path)
 	}
-	path = fmt.Sprintf("befw/%s", path)
+	path = fmt.Sprintf("befw/$service$/%s", path)
 	value := time.Now().Unix() + 1209600 // 2 weeks
 
 	if v, ok := conf.services[path]; !(ok && v > time.Now().Unix()) {

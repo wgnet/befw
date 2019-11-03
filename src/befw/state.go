@@ -187,14 +187,8 @@ func (state *state) generateState() error {
 		paths := state.generateKVPaths(newServiceName)
 
 		// create ipset-newServiceName
-		q := api.QueryOptions{Datacenter: state.Config.ConsulDC}
 		for _, path := range paths {
-			pairs, _, e := state.consulClient.KV().List(path, &q)
-			if e != nil {
-				// error - consul unavailable, go out
-				return e
-			}
-			for _, kvp := range pairs {
+			for _, kvp := range state.consulKVList(path) {
 				if !BEFWRegexp.MatchString(kvp.Key) {
 					continue // do not fucking try
 				}
@@ -215,7 +209,7 @@ func (state *state) generateState() error {
 		state.NodeServices = append(state.NodeServices, newService)
 	}
 	// 3 ok let's append
-	state.getAllowDenyIpsets()
+	state.getStaticIPSets()
 	state.generateIPSets()
 	return nil
 }
@@ -306,21 +300,27 @@ func isAlias(pair *api.KVPair, path string) bool {
 	return false
 }
 
+var aliasCache map[string][]serviceClient
+
 func (state *state) getAlias(pair *api.KVPair, path string) []serviceClient {
+	if aliasCache == nil {
+		aliasCache = make(map[string][]serviceClient)
+	}
 	aliasName := strings.Replace(pair.Key, path, "", 1)
-	q := api.QueryOptions{Datacenter: state.Config.ConsulDC}
+	if v, ok := aliasCache[aliasName]; ok {
+		return v
+	}
 	path = fmt.Sprintf("befw/$alias$/%s/", aliasName)
 	res := make([]serviceClient, 0)
-	if pairs, _, e := state.consulClient.KV().List(path, &q); e == nil {
-		for _, kvp := range pairs {
-			if kvp.Value == nil {
-				continue
-			}
-			if newClient, e := kv2ServiceClient(kvp); e == nil {
-				res = append(res, newClient)
-			}
+	for _, kvp := range state.consulKVList(path) {
+		if kvp.Value == nil {
+			continue
+		}
+		if newClient, e := kv2ServiceClient(kvp); e == nil {
+			res = append(res, newClient)
 		}
 	}
+	aliasCache[aliasName] = res
 	return res
 }
 func kv2ServiceClient(pair *api.KVPair) (serviceClient, error) {
@@ -341,6 +341,10 @@ func kv2ServiceClient(pair *api.KVPair) (serviceClient, error) {
 
 func (state *state) generateKVPaths(newServiceName string) []string {
 	ret := []string{
+		fmt.Sprintf("befw/$service$/%s/%s/%s/", state.nodeDC, state.nodeName, newServiceName),
+		fmt.Sprintf("befw/$service$/%s/%s/", state.nodeDC, newServiceName),
+		fmt.Sprintf("befw/$service$/%s/", newServiceName),
+		// TODO: remove last 3
 		fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName, newServiceName),
 		fmt.Sprintf("befw/%s/%s/", state.nodeDC, newServiceName),
 		fmt.Sprintf("befw/%s/", newServiceName),
@@ -348,17 +352,43 @@ func (state *state) generateKVPaths(newServiceName string) []string {
 	return ret
 }
 
-func (state *state) getAllowDenyIpsets() {
-	q := api.QueryOptions{Datacenter: state.Config.ConsulDC}
+func (state *state) generateIPSetKVPaths(ipsetName string) []string {
+	ret := []string{
+		fmt.Sprintf("befw/$ipset$/%s/%s/%s/", state.nodeDC, state.nodeName, ipsetName),
+		fmt.Sprintf("befw/$ipset$/%s/%s/", state.nodeDC, ipsetName),
+		fmt.Sprintf("befw/$ipset$/%s/", ipsetName),
+		// TODO: remove last 3
+		fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName, ipsetName),
+		fmt.Sprintf("befw/%s/%s/", state.nodeDC, ipsetName),
+		fmt.Sprintf("befw/%s/", ipsetName),
+	}
+	return ret
+}
+
+func (state *state) consulKVList(prefix string) api.KVPairs {
+	ret := make(api.KVPairs, 0)
+
+	queryOptions := &api.QueryOptions{
+		Datacenter:        state.Config.ConsulDC,
+		UseCache:          false,
+		AllowStale:        true,
+		RequireConsistent: false,
+	}
+	if r, _, e := state.consulClient.KV().List(prefix, queryOptions); e == nil {
+		return r
+		// TODO: make pre-parsing
+	} else {
+		LogWarning("Can't obtain data from kv:", prefix, e.Error())
+	}
+	return ret
+}
+
+func (state *state) getStaticIPSets() {
 	for _, set := range state.Config.StaticSetList {
 		state.IPSets[set.Name] = make([]string, 0) // empty? ok!
-		for _, path := range state.generateKVPaths(set.Name) {
-			pairs, _, e := state.consulClient.KV().List(path, &q)
-			if e != nil {
-				LogWarning("Can't obtain data from kv:", path, e.Error())
-				continue
-			}
-			for _, kvp := range pairs {
+		for _, path := range state.generateIPSetKVPaths(set.Name) {
+			for _, kvp := range state.consulKVList(path) {
+
 				if isAlias(kvp, path) {
 					for _, newClient := range state.getAlias(kvp, path) {
 						newClient.appendToIpsetIf(&state.IPSets, set.Name)

@@ -32,10 +32,10 @@ func TestGenerateKVPaths(t *testing.T) {
 		nodeName: "ed-sl-a126.be.core.pw",
 	}
 	p2 := s2.generateKVPaths("test")
-	if len(p1) != 3 {
+	if len(p1) != 6 {
 		t.Error("Len != 3 in p1")
 	}
-	if len(p2) != 3 {
+	if len(p2) != 6 {
 		t.Error("Len != 3 in p2")
 	}
 }

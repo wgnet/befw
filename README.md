@@ -81,7 +81,7 @@ See [sample config](samples/befw.sync.conf) to get into, but we doubt it is usef
 consul.KV().Put("befw/service_tcp_443/192.168.1.1/30", time.now()+2*week)
 consul.KV().Put("befw/dc/service_tcp_443/192.168.1.1/30", time.now()+2*week)
 consul.KV().Put("befw/dc/nodename/service_tcp_443/192.168.1.1/30", time.now()+2*week)
-consul.KV().Put("befw/service_tcp_443/$trusted$", -1) # <0 never expires
+consul.KV().Put("befw/service_tcp_443/$trusted$", -1) // <0 never expires
 consul.KV().Put("befw/$alias$/$trusted$/192.168.1.1.30", time.now()+1*hour)
 ```
 ## Tools

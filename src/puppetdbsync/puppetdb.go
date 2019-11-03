@@ -98,7 +98,7 @@ func (conf *syncConfig) requestPuppetDB() []*syncData {
 		}
 	} else {
 		conf.lastCounter++
-		befw.LogDebug("Nothing changed, skipping update")
+		//befw.LogDebug("[Syncer] Nothing changed, skipping update")
 	}
 	return ret
 }

@@ -44,7 +44,7 @@ var serviceNil = &serviceUnknownClient{
 func (this *service) registerNflog() {
 	serviceClientsLock.Lock()
 	defer serviceClientsLock.Unlock()
-	LogInfo(fmt.Sprintf("[NF] Registering service %s @ %d/%s", this.ServiceName, this.ServicePort, this.ServiceProtocol))
+	LogDebug(fmt.Sprintf("[NF] Registering service %s @ %d/%s", this.ServiceName, this.ServicePort, this.ServiceProtocol))
 	if _, ok := serviceClients[this.ServiceName]; ok {
 		return
 	}
@@ -164,7 +164,7 @@ func syncData() { // client function
 		}
 
 	}
-	LogInfo("[NF] Services stats have been written")
+	//LogDebug("[NF] Services stats have been written")
 
 }
 

@@ -23,7 +23,7 @@ func recoverLastState(configFile string) *state {
 	for _, conf := range staticIPSetList {
 		ret.IPSets[conf.Name] = make([]string, 0)
 	}
-	ret.IPSets["rules_allow"] = append(ret.IPSets["rules_allow"], "10.0.0.0/8")
+	ret.IPSets["rules_allow"] = append(ret.IPSets["rules_allow"], []string{"10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"}...)
 	ret.NodeServices = make([]service, 0)
 	LogInfo("recoverLastState(): returning default state")
 	ret.Config = createConfig(configFile)
@@ -38,7 +38,7 @@ func (state *state) saveLastState() {
 		LogWarning("saveLastState() failed: ", err.Error())
 		return
 	}
-	if err 	= ioutil.WriteFile(befwStateBin, b.Bytes(), 0600); err != nil {
+	if err = ioutil.WriteFile(befwStateBin, b.Bytes(), 0600); err != nil {
 		LogWarning("saveLastState() failed: ", err.Error())
 	}
 }

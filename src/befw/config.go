@@ -109,7 +109,7 @@ func createConfig(configFile string) *config {
 		if v, ok := kv["token"]; ok {
 			ret.ConsulToken = v
 		}
-		if v, ok := kv["IPSets"]; ok {
+		if v, ok := kv["ipsets"]; ok {
 			ret.IPSetDir = v
 		}
 		if v, ok := kv["services"]; ok {
