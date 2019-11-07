@@ -1,3 +1,7 @@
+### 0.1.4
+- befw now uses stale to get updates faster
+- new paths: $ipset$ for ipsets and $service$ for services
+
 ### 0.1.3
 - befw now checks if its rules is consistent
 - befw now can recover firewall access if consul is dead with a hard-coded ( TOTO: configured ) networks
