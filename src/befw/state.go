@@ -244,8 +244,11 @@ func (state *state) applyState() error {
 
 }
 
+var aliasCache map[string][]serviceClient
+
 func refresh(configFile string) (retState *state, retError error) {
 	var state *state
+  aliasCache = make(map[string][]serviceClient) // drop old aliases
 	if ConfigurationRunning != DebugConfiguration {
 		defer func() {
 			if e := recover(); e != nil {
@@ -300,7 +303,6 @@ func isAlias(pair *api.KVPair, path string) bool {
 	return false
 }
 
-var aliasCache map[string][]serviceClient
 
 func (state *state) getAlias(pair *api.KVPair, path string) []serviceClient {
 	if aliasCache == nil {
