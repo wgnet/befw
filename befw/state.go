@@ -26,13 +26,14 @@ import (
 )
 
 type state struct {
-	consulClient *api.Client
-	nodeName     string
-	nodeDC       string
-	NodeServices []service
-	IPSets       map[string][]string
-	lastUpdated  time.Time
-	Config       *config
+	consulClient        *api.Client
+	consulWatcherClient *api.Client
+	nodeName            string
+	nodeDC              string
+	NodeServices        []service
+	IPSets              map[string][]string
+	lastUpdated         time.Time
+	Config              *config
 }
 
 type ipset struct {
@@ -52,9 +53,25 @@ func newState(configFile string) *state {
 	cfg.createStaticIPSets() // before any
 	state := new(state)
 	state.Config = cfg
-	config := api.DefaultConfig()
-	config.Address = cfg.ConsulAddr
-	state.consulClient, e = api.NewClient(config)
+
+	consulConfig := api.DefaultNonPooledConfig()
+	consulConfig.Address = cfg.ConsulAddr
+	if cfg.ConsulToken != "" {
+		consulConfig.Token = cfg.ConsulToken
+	}
+	state.consulClient, e = api.NewClient(consulConfig)
+	// XXX: now we have client
+
+	consulConfig.HttpClient.Timeout = 10 * time.Second
+
+	consulWatcherConfig := api.DefaultConfig()
+	consulWatcherConfig.Address = cfg.ConsulAddr
+	if cfg.ConsulToken != "" {
+		consulWatcherConfig.Token = cfg.ConsulToken
+	}
+	state.consulWatcherClient, e = api.NewClient(consulWatcherConfig)
+	consulWatcherConfig.HttpClient.Timeout = WatchTimeout
+	// watcher client
 	if e != nil {
 		LogError("Can't create consul client. Error ", e.Error())
 	}
@@ -248,7 +265,7 @@ var aliasCache map[string][]serviceClient
 
 func refresh(configFile string) (retState *state, retError error) {
 	var state *state
-  aliasCache = make(map[string][]serviceClient) // drop old aliases
+	aliasCache = make(map[string][]serviceClient) // drop old aliases
 	if ConfigurationRunning != DebugConfiguration {
 		defer func() {
 			if e := recover(); e != nil {
@@ -302,7 +319,6 @@ func isAlias(pair *api.KVPair, path string) bool {
 	}
 	return false
 }
-
 
 func (state *state) getAlias(pair *api.KVPair, path string) []serviceClient {
 	if aliasCache == nil {

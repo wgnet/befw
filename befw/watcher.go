@@ -40,11 +40,11 @@ func sleepIfNoChanges(state *state) {
 	select {
 	case <-notifyChannel:
 		// wait for next minute to get commitment index
-//		sleep := 60 - time.Now().Second()
-//		if sleep < 5 {
-//			sleep = 60 + sleep
-//		}
-//		time.Sleep(time.Duration(sleep) * time.Second)
+		//		sleep := 60 - time.Now().Second()
+		//		if sleep < 5 {
+		//			sleep = 60 + sleep
+		//		}
+		//		time.Sleep(time.Duration(sleep) * time.Second)
 		break
 	case <-time.After(WatchTimeout):
 		break
@@ -131,26 +131,26 @@ func consulUpdateWatchers(state *state) {
 
 func watchLocalServices(state *state, chanExit chan bool) {
 	services := make(map[string]int)
-	if m, e := state.consulClient.Agent().Services(); e == nil {
+	if m, e := state.consulWatcherClient.Agent().Services(); e == nil {
 		for name, s := range m {
 			services[name] = s.Port
 		}
 		for {
-			if m, e := state.consulClient.Agent().Services(); e == nil {
+			if m, e := state.consulWatcherClient.Agent().Services(); e == nil {
 				for name, s := range m {
 					if p, ok := services[name]; ok {
 						if p == s.Port {
 							continue
 						}
 					}
-					LogInfo("[Watcher] Found new/changed service", name, "on port", s.Port)
+					LogInfo("[Watcher] Found new/changed service ", name, " on port ", s.Port)
 					services[name] = s.Port
 					notifyChannel <- nil
 					break
 				}
 				for name, port := range services {
 					if _, ok := m[name]; !ok {
-						LogInfo("[Watcher] Found deleted service", name, "on port", port)
+						LogInfo("[Watcher] Found deleted service ", name, " on port ", port)
 						delete(services, name)
 						notifyChannel <- nil
 						break
@@ -172,7 +172,7 @@ func watchLocalServices(state *state, chanExit chan bool) {
 
 func watchKVStore(path string, state *state, chanExit chan bool) {
 	var s_idx uint64 = 0
-	if l, m, e := state.consulClient.KV().List(path, &api.QueryOptions{Datacenter: state.Config.ConsulDC,}); e == nil {
+	if l, m, e := state.consulWatcherClient.KV().List(path, &api.QueryOptions{Datacenter: state.Config.ConsulDC,}); e == nil {
 		if len(l) != 0 {
 			s_idx = m.LastIndex
 		}
@@ -187,7 +187,7 @@ func watchKVStore(path string, state *state, chanExit chan bool) {
 		}
 		q := &api.QueryOptions{Datacenter: state.Config.ConsulDC,
 			WaitTime: defaultDieTimeout, WaitIndex: s_idx}
-		if l, m, e := state.consulClient.KV().List(path, q); e == nil {
+		if l, m, e := state.consulWatcherClient.KV().List(path, q); e == nil {
 			if len(l) == 0 {
 				if s_idx != 0 {
 					LogInfo("[Watcher] KVStore (", path, ") has been purged")

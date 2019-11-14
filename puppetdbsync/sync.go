@@ -19,12 +19,13 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	"github.com/hashicorp/consul/api"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hashicorp/consul/api"
 	"github.com/wgnet/befw/befw"
 )
 
