@@ -13,9 +13,9 @@ It's just a bit smarter than ```curl localhost:8200/v1/agent/services|perl -e '<
 
 # How to build
 ```
-go install github.com/gitgroman/befw/cmd/befw-cli
-go install github.com/gitgroman/befw/cmd/befw-firewalld
-go install github.com/gitgroman/befw/cmd/befw-sync
+go install github.com/wgnet/befw/cmd/befw-cli
+go install github.com/wgnet/befw/cmd/befw-firewalld
+go install github.com/wgnet/befw/cmd/befw-sync
 ```
 ***
 # Deployment scheme

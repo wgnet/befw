@@ -20,8 +20,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gitgroman/befw/befw"
-	"github.com/gitgroman/befw/puppetdbsync"
+	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/puppetdbsync"
 )
 
 func main() {

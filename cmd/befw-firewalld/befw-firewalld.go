@@ -19,7 +19,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/gitgroman/befw/befw"
+	"github.com/wgnet/befw/befw"
 )
 
 func main() {
