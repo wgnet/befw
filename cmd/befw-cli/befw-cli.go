@@ -16,12 +16,13 @@
 package main
 
 import (
-	"./befw"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/gitgroman/befw/befw"
 )
 
 var commands = map[string]func([]string) error{
@@ -141,7 +142,7 @@ func clearStats(args []string) error {
 var configFile string
 
 func main() {
-	defer panicRecovery()
+	defer befw.PanicRecovery()
 	flag.StringVar(&configFile, "config", "/etc/befw.conf", "Config file for befw")
 	flag.Parse()
 	var arg0 string
