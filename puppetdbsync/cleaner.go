@@ -16,7 +16,7 @@
 package puppetdbsync
 
 import (
-	"../befw"
+	"github.com/wgnet/befw/befw"
 	"strconv"
 	"time"
 )

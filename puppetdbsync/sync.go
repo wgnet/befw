@@ -25,8 +25,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/wgnet/befw/befw"
 )
-import "../befw"
 
 func newSync(config string) *syncConfig {
 	conf := &syncConfig{

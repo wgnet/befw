@@ -16,7 +16,7 @@
 package puppetdbsync
 
 import (
-	"../befw"
+	"github.com/wgnet/befw/befw"
 	"encoding/json"
 	"io/ioutil"
 	"net"
