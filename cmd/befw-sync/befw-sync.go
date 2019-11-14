@@ -18,30 +18,27 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
+
+	"github.com/gitgroman/befw/befw"
+	"github.com/gitgroman/befw/puppetdbsync"
 )
-import "./befw"
 
 func main() {
+	config := flag.String("config", "/etc/befw.sync.conf", "BEFW-SYNC config file")
 	debug := flag.Bool("debug", false, "StartService with debug configuration")
-	nonflog := flag.Bool("nonflog", false, "Disable NF Logging")
-	noroot := flag.Bool("noroot", false, "Allow run service as non-root user")
-	timeout := flag.Duration("timeout", befw.WatchTimeout, "Force refresh timeout")
-	config := flag.String("config", "/etc/befw.conf", "Config file for befw")
+	timeout := flag.Duration("timeout", 10*time.Second, "Timeout between puppetdb re-query")
 	flag.Parse()
-
 	if *debug {
 		befw.ConfigurationRunning = befw.DebugConfiguration
 	} else {
-		defer panicRecovery()
+		defer befw.PanicRecovery()
 	}
 
-	befw.WatchTimeout = *timeout
-	if !*noroot && os.Getuid() != 0 {
-		befw.LogError("You must be r00t to run as a service")
-	}
-	if !*nonflog {
-		befw.StartNFLogger()
-		befw.LogInfo("NFLogger started, you can get information from /var/run/befw/*")
-	}
-	befw.StartService(*config)
+	go func() {
+		time.Sleep(24 * time.Hour)
+		os.Exit(0)
+	}()
+
+	puppetdbsync.Run(*config, *timeout)
 }

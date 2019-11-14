@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
-package main
+package befw
 
 import (
 	"fmt"
 	"os"
 )
 
-func panicRecovery() {
+func PanicRecovery() {
 	if e := recover(); e != nil {
 		var r string
 		switch e.(type) {

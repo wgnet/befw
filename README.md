@@ -12,16 +12,10 @@ It's just a bit smarter than ```curl localhost:8200/v1/agent/services|perl -e '<
 - We provide the only PuppetDB orchestration provider. You may need to develop yourth.
 
 # How to build
-It's old-style project, you don't need anything except golang>=1.9, automake & bash.
-Just type make, you sould get something like that:
 ```
-$ cd befw-0.0.9
-$ make
-make[1]: Entering directory `befw-0.0.9/src'
-./build.sh
-ok      _/builddir/build/BUILD/befw-0.0.9/src/befw      0.013s
-ok      _/builddir/build/BUILD/befw-0.0.9/src/puppetdbsync      0.011s
-make[1]: Leaving directory `befw-0.0.9/src'
+go install github.com/gitgroman/befw/cmd/befw-cli
+go install github.com/gitgroman/befw/cmd/befw-firewalld
+go install github.com/gitgroman/befw/cmd/befw-sync
 ```
 ***
 # Deployment scheme
