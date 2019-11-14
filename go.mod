@@ -1,4 +1,4 @@
-module github.com/gitgroman/befw
+module github.com/wgnet/befw
 
 go 1.13
 

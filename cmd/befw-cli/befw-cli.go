@@ -22,7 +22,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/gitgroman/befw/befw"
+	"github.com/wgnet/befw/befw"
 )
 
 var commands = map[string]func([]string) error{
