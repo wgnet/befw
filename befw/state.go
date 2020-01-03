@@ -62,7 +62,7 @@ func newState(configFile string) *state {
 	state.consulClient, e = api.NewClient(consulConfig)
 	// XXX: now we have client
 
-	consulConfig.HttpClient.Timeout = 10 * time.Second
+	consulConfig.HttpClient.Timeout = BefwConfig.Timeout.Consul
 
 	consulWatcherConfig := api.DefaultConfig()
 	consulWatcherConfig.Address = cfg.ConsulAddr
@@ -70,7 +70,7 @@ func newState(configFile string) *state {
 		consulWatcherConfig.Token = cfg.ConsulToken
 	}
 	state.consulWatcherClient, e = api.NewClient(consulWatcherConfig)
-	consulWatcherConfig.HttpClient.Timeout = WatchTimeout
+	consulWatcherConfig.HttpClient.Timeout = BefwConfig.Timeout.ConsulWatch
 	// watcher client
 	if e != nil {
 		LogError("Can't create consul client. Error ", e.Error())

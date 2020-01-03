@@ -26,7 +26,8 @@ func main() {
 	debug := flag.Bool("debug", false, "StartService with debug configuration")
 	nonflog := flag.Bool("nonflog", false, "Disable NF Logging")
 	noroot := flag.Bool("noroot", false, "Allow run service as non-root user")
-	timeout := flag.Duration("timeout", befw.WatchTimeout, "Force refresh timeout")
+	timeout := flag.Duration("timeout", befw.BefwConfig.Timeout.ConsulWatch, "Force refresh timeout")
+	consulTimeout := flag.Duration("consulTimeout", befw.BefwConfig.Timeout.Consul, "Consul HTTP connection timeout")
 	config := flag.String("config", "/etc/befw.conf", "Config file for befw")
 	flag.Parse()
 
@@ -36,7 +37,8 @@ func main() {
 		defer befw.PanicRecovery()
 	}
 
-	befw.WatchTimeout = *timeout
+	befw.BefwConfig.Timeout.ConsulWatch = *timeout
+	befw.BefwConfig.Timeout.Consul = *consulTimeout
 	if !*noroot && os.Getuid() != 0 {
 		befw.LogError("You must be r00t to run as a service")
 	}
