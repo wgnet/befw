@@ -26,7 +26,6 @@ import (
 var notifyChannel = make(chan notify.EventInfo, 100)
 var watchers = make(map[string]chan bool)
 
-var WatchTimeout = 10 * time.Minute
 var defaultDieTimeout = 10 * time.Second
 
 var watcherStarted = false
@@ -46,7 +45,7 @@ func sleepIfNoChanges(state *state) {
 		//		}
 		//		time.Sleep(time.Duration(sleep) * time.Second)
 		break
-	case <-time.After(WatchTimeout):
+	case <-time.After( BefwConfig.Timeout.ConsulWatch ):
 		break
 	}
 	cleanupChannel()

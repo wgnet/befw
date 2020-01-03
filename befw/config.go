@@ -22,7 +22,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
+
+var BefwConfig *befwConfigType = defaultBEFWConfig()
 
 type config struct {
 	ConsulAddr    string
@@ -57,6 +60,16 @@ type port struct {
 	Port      int              `json:"port"`
 	PortProto befwServiceProto `json:"protocol"`
 }
+
+type befwConfigType struct {
+	Timeout befwConfigTimoutType
+}
+
+type befwConfigTimoutType struct {
+	Consul      time.Duration
+	ConsulWatch time.Duration
+}
+
 
 func (self *service) toString() string {
 	s := new(strings.Builder)
@@ -150,4 +163,13 @@ func createConfig(configFile string) *config {
 		}
 	}
 	return ret
+}
+
+func defaultBEFWConfig() *befwConfigType {
+	return &befwConfigType{
+		Timeout: befwConfigTimoutType{
+			Consul:      10 * time.Second,
+			ConsulWatch: 10 * time.Minute,
+		},
+	}
 }
