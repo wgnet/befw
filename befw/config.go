@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-var BefwConfig *befwConfigType = defaultBEFWConfig()
+var OverrideConfig = make(map[string]string)
 
 type config struct {
 	ConsulAddr    string
@@ -37,6 +37,7 @@ type config struct {
 	IPSetDir      string
 	RulesPath     string
 	StaticSetList []staticIPSetConf
+	Timeout       befwConfigTimoutType
 }
 
 type befwServiceProto string
@@ -59,10 +60,6 @@ type service struct {
 type port struct {
 	Port      int              `json:"port"`
 	PortProto befwServiceProto `json:"protocol"`
-}
-
-type befwConfigType struct {
-	Timeout befwConfigTimoutType
 }
 
 type befwConfigTimoutType struct {
@@ -93,6 +90,10 @@ func createConfig(configFile string) *config {
 		ServicesDir:   staticServicesPath,
 		RulesPath:     staticRulesPath,
 		StaticSetList: staticIPSetList, // default, TODO: make a Config
+		Timeout: befwConfigTimoutType{
+			Consul:      5 * 60 * time.Second,
+			ConsulWatch: 10 * 60 * time.Second,
+		},
 	}
 	kv := make(map[string]string)
 	if configFile == "" {
@@ -113,30 +114,17 @@ func createConfig(configFile string) *config {
 				}
 			}
 		}
-		if v, ok := kv["address"]; ok {
-			ret.ConsulAddr = v
-		}
-		if v, ok := kv["dc"]; ok {
-			ret.ConsulDC = v
-		}
-		if v, ok := kv["token"]; ok {
-			ret.ConsulToken = v
-		}
-		if v, ok := kv["ipsets"]; ok {
-			ret.IPSetDir = v
-		}
-		if v, ok := kv["services"]; ok {
-			ret.ServicesDir = v
-		}
-		if v, ok := kv["rules"]; ok {
-			ret.RulesPath = v
-		}
-		if v, ok := kv["nodename"]; ok {
-			ret.NodeName = v
-		}
-		if v, ok := kv["nodedc"]; ok {
-			ret.NodeDC = v
-		}
+		setConfigKV(&ret.ConsulAddr,  "address", OverrideConfig, kv)
+		setConfigKV(&ret.ConsulDC,  "dc", OverrideConfig, kv)
+		setConfigKV(&ret.ConsulToken,  "token", OverrideConfig, kv)
+		setConfigKV(&ret.IPSetDir,  "ipsets", OverrideConfig, kv)
+		setConfigKV(&ret.ServicesDir,  "services", OverrideConfig, kv)
+		setConfigKV(&ret.RulesPath,  "rules", OverrideConfig, kv)
+		setConfigKV(&ret.NodeName,  "nodename", OverrideConfig, kv)
+		setConfigKV(&ret.NodeDC,  "nodedc", OverrideConfig, kv)
+		setConfigKVSeconds(&ret.Timeout.Consul,  "consul_timeout_sec", OverrideConfig, kv)
+		setConfigKVSeconds(&ret.Timeout.ConsulWatch,  "consulwatch_timeout_sec", OverrideConfig, kv)
+
 		if _, ok := kv["fail"]; ok {
 			LogError("[Config] you must edit your Config file before proceed")
 		}
@@ -165,11 +153,22 @@ func createConfig(configFile string) *config {
 	return ret
 }
 
-func defaultBEFWConfig() *befwConfigType {
-	return &befwConfigType{
-		Timeout: befwConfigTimoutType{
-			Consul:      10 * time.Second,
-			ConsulWatch: 10 * time.Minute,
-		},
+func setConfigKV(dest *string, key string, kvs ...map[string]string) {
+	for _, kv := range kvs {
+		if value, ok := kv[key]; ok {
+			*dest = value
+			return
+		}
+	}
+}
+
+func setConfigKVSeconds(dest *time.Duration, key string, kvs ...map[string]string) {
+	for _, kv := range kvs {
+		if value, ok := kv[key]; ok {
+			if i, err := strconv.Atoi(value); err == nil {
+				*dest = time.Duration( i ) * time.Second
+				return
+			}
+		}
 	}
 }
