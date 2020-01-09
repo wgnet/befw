@@ -45,7 +45,7 @@ func sleepIfNoChanges(state *state) {
 		//		}
 		//		time.Sleep(time.Duration(sleep) * time.Second)
 		break
-	case <-time.After( BefwConfig.Timeout.ConsulWatch ):
+	case <-time.After( state.Config.Timeout.ConsulWatch ):
 		break
 	}
 	cleanupChannel()
