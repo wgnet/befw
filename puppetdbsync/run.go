@@ -27,21 +27,22 @@ import (
 var canRun = false
 var canRunMutex = sync.RWMutex{}
 
-var exitChan = make(chan bool)
+var exitChan = make(chan bool, 10)
 
 func Run(config string, timeout time.Duration) {
 	syncConfig := newSync(config)
 	syncConfig.timeout = timeout
-	go makeCache(syncConfig)
+	//go MakeCache(syncConfig)
 	go keepLock(syncConfig)
-	sigChan := make(chan os.Signal, 1)
+	sigChan := make(chan os.Signal, 10)
 	go func() {
 		select {
 		case <-sigChan:
-			exitChan <- true
-			exitChan <- true
-			exitChan <- true
-			exitChan <- true
+			for i := 0; i < 9; i++ {
+				exitChan <- true
+			}
+			time.Sleep(10 * time.Second)
+			os.Exit(0)
 		}
 	}() // wait for signal
 	signal.Notify(sigChan, syscall.SIGKILL, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -66,7 +67,7 @@ func Run(config string, timeout time.Duration) {
 	}
 }
 
-func makeCache(config *syncConfig) {
+func MakeCache(config *syncConfig) {
 	for {
 		config.makeHotCache()
 		select {

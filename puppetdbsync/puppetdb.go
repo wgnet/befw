@@ -16,8 +16,8 @@
 package puppetdbsync
 
 import (
-	"github.com/wgnet/befw/befw"
 	"encoding/json"
+	"github.com/wgnet/befw/befw"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -55,6 +55,7 @@ func (conf *syncConfig) requestPuppetDB() []*syncData {
 			return ret
 		}
 	}
+	befw.LogInfo("[Syncer] made a successfull puppetdb request")
 	toSort := make([]string, 0)
 	for _, value := range result {
 		if _, ok := value["parameters"]; ok {
@@ -104,8 +105,10 @@ func (conf *syncConfig) requestPuppetDB() []*syncData {
 }
 
 func (conf *syncConfig) validate(data *syncData) bool {
-	conf.cacheMutex.RLock()
-	defer conf.cacheMutex.RUnlock()
+	if conf.cacheMutex != nil {
+		conf.cacheMutex.RLock()
+		defer conf.cacheMutex.RUnlock()
+	}
 	var sOk, dOk, nOk, vOk bool
 	if strings.HasPrefix(data.value, "$") && strings.HasSuffix(data.value, "$") {
 		vOk = true
@@ -124,6 +127,9 @@ func (conf *syncConfig) validate(data *syncData) bool {
 				}
 			}
 		}
+	}
+	if conf.cache == nil {
+		return sOk && vOk
 	}
 	if data.dc == "" {
 		dOk = true

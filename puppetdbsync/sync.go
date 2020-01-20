@@ -77,27 +77,38 @@ func newSync(config string) *syncConfig {
 			conf.commitToken = v
 		}
 	}
-	conf.httpClient = &http.Client{}
+	conf.httpClient = &http.Client{Timeout: 30 * time.Second}
 	if !conf.verify {
 		trans := *(http.DefaultTransport.(*http.Transport))
 		trans.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		conf.httpClient.Transport = &trans
 	}
 	consulConfig := api.DefaultConfig()
+	consulConfigCache := api.DefaultConfig()
 	if conf.consulAddr != "" {
 		consulConfig.Address = conf.consulAddr
+		consulConfigCache.Address = conf.consulAddr
 	}
 	if conf.commitToken != "" {
 		consulConfig.Token = conf.commitToken
+		consulConfigCache.Token = conf.commitToken
 	}
 	if conf.consulDC != "" {
 		consulConfig.Datacenter = conf.consulDC
+		consulConfigCache.Datacenter = conf.consulDC
 	}
 	var e error
 	if conf.consulClient, e = api.NewClient(consulConfig); e != nil {
 		befw.LogError("[Syncer] Invalid Consul config: ", e.Error())
 		return nil
 	}
+	consulConfig.HttpClient.Timeout = 30 * time.Second
+	if conf.consulClientCache, e = api.NewClient(consulConfigCache); e != nil {
+		befw.LogError("[Syncer] Invalid Consul config: ", e.Error())
+		return nil
+	}
+	consulConfigCache.HttpClient.Timeout = 30 * time.Second
+
 	if self, e := conf.consulClient.Agent().Self(); e != nil {
 		befw.LogError("[Syncer] Can't connect to Consul: ", e.Error())
 		return nil
@@ -118,7 +129,7 @@ func (conf *syncConfig) makeHotCache() {
 	conf.cache.error = false
 	conf.cacheMutex.Lock()
 	defer conf.cacheMutex.Unlock()
-	if dcs, e := conf.consulClient.Catalog().Datacenters(); e != nil {
+	if dcs, e := conf.consulClientCache.Catalog().Datacenters(); e != nil {
 		conf.cache.error = true
 		return
 	} else {
@@ -136,7 +147,7 @@ func (conf *syncConfig) makeHotCache() {
 		q := &api.QueryOptions{
 			Datacenter: dc,
 		}
-		if nodes, _, e := conf.consulClient.Catalog().Nodes(q); e != nil {
+		if nodes, _, e := conf.consulClientCache.Catalog().Nodes(q); e != nil {
 			conf.cache.error = true
 			return
 		} else {
@@ -173,7 +184,7 @@ func (conf *syncConfig) writeSyncData(data *syncData) {
 			befw.LogWarning("[Syncer] can't write data to KV: ", path, ":", e.Error())
 		}
 		conf.services[path] = value
-		befw.LogInfo("[Syncer] wrote ", path, "to KV with value ", value)
+		befw.LogInfo("[Syncer] wrote ", path, " to KV with value ", value)
 	}
 }
 

@@ -1,3 +1,12 @@
+### 0.1.7
+- debug log is now hidden in production
+- new config options & timeouts
+### 0.1.6
+- befw watcher optimisations
+- befw-sync refactoring
+### 0.1.5
+- go mod 2.0
+- befw now has timeouts for consul connections
 ### 0.1.4
 - befw now uses stale to get updates faster
 - new paths: $ipset$ for ipsets and $service$ for services

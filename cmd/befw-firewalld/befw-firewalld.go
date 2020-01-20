@@ -37,9 +37,12 @@ func main() {
 		defer befw.PanicRecovery()
 	}
 
-
-	if *timeout != "" { befw.OverrideConfig[ "consul_timeout_sec" ]= *timeout }
-	if *consulTimeout != "" { befw.OverrideConfig[ "consulwatch_timeout_sec" ]= *consulTimeout }
+	if *timeout != "" {
+		befw.OverrideConfig["consul_timeout_sec"] = *timeout
+	}
+	if *consulTimeout != "" {
+		befw.OverrideConfig["consulwatch_timeout_sec"] = *consulTimeout
+	}
 
 	if !*noroot && os.Getuid() != 0 {
 		befw.LogError("You must be r00t to run as a service")

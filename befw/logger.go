@@ -80,5 +80,5 @@ func LogInfo(message ...interface{}) {
 }
 
 func LogDebug(message ...interface{}) {
-	logMessageStdout(syslog.LOG_DEBUG, message...)
+	logMessage(syslog.LOG_DEBUG, message...)
 }

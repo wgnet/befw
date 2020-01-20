@@ -23,24 +23,25 @@ import (
 )
 
 type syncConfig struct {
-	url           string
-	verify        bool
-	consulAddr    string
-	consulDC      string
-	commitToken   string
-	nodeName      string
-	nodeAddr      string
-	sessionID     string
-	httpClient    *http.Client
-	consulClient  *api.Client
-	cache         *hotCache
-	lastResult    []string
-	lastCounter   int
-	cacheMutex    *sync.RWMutex
-	services      map[string]int64
-	servicesMutex *sync.RWMutex
-	servicesWG    *sync.WaitGroup
-	timeout       time.Duration
+	url               string
+	verify            bool
+	consulAddr        string
+	consulDC          string
+	commitToken       string
+	nodeName          string
+	nodeAddr          string
+	sessionID         string
+	httpClient        *http.Client
+	consulClient      *api.Client
+	consulClientCache *api.Client
+	cache             *hotCache
+	lastResult        []string
+	lastCounter       int
+	cacheMutex        *sync.RWMutex
+	services          map[string]int64
+	servicesMutex     *sync.RWMutex
+	servicesWG        *sync.WaitGroup
+	timeout           time.Duration
 }
 
 type syncData struct {

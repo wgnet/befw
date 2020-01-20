@@ -16,6 +16,7 @@
 package befw
 
 import (
+	"fmt"
 	"github.com/hashicorp/consul/api"
 	"github.com/rjeczalik/notify"
 	"math/rand"
@@ -88,12 +89,19 @@ func (this *config) startFileWatcher() {
 
 func consulUpdateWatchers(state *state) {
 	// 1. create array of keys we need for this run
-	keys := []string{"localServices", "befw/$alias$"}
+	keys := []string{"localServices"}
 	for _, set := range state.Config.StaticSetList {
 		keys = append(keys, state.generateIPSetKVPaths(set.Name)...)
 	}
 	for _, s := range state.NodeServices {
 		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
+	}
+	if aliasCache != nil {
+		for s, _ := range aliasCache {
+			keys = append(keys, fmt.Sprintf("befw/$alias$/%s", s))
+		}
+	} else {
+		keys = append(keys, "befw/$alias$")
 	}
 	sort.Strings(keys)
 	in_keys := func(x string) bool {

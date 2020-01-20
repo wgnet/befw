@@ -67,7 +67,6 @@ type befwConfigTimoutType struct {
 	ConsulWatch time.Duration
 }
 
-
 func (self *service) toString() string {
 	s := new(strings.Builder)
 	s.WriteString(fmt.Sprintf("Service %s, port %d/%s", self.ServiceName, self.ServicePort, self.ServiceProtocol))
@@ -114,16 +113,16 @@ func createConfig(configFile string) *config {
 				}
 			}
 		}
-		setConfigKV(&ret.ConsulAddr,  "address", OverrideConfig, kv)
-		setConfigKV(&ret.ConsulDC,  "dc", OverrideConfig, kv)
-		setConfigKV(&ret.ConsulToken,  "token", OverrideConfig, kv)
-		setConfigKV(&ret.IPSetDir,  "ipsets", OverrideConfig, kv)
-		setConfigKV(&ret.ServicesDir,  "services", OverrideConfig, kv)
-		setConfigKV(&ret.RulesPath,  "rules", OverrideConfig, kv)
-		setConfigKV(&ret.NodeName,  "nodename", OverrideConfig, kv)
-		setConfigKV(&ret.NodeDC,  "nodedc", OverrideConfig, kv)
-		setConfigKVSeconds(&ret.Timeout.Consul,  "consul_timeout_sec", OverrideConfig, kv)
-		setConfigKVSeconds(&ret.Timeout.ConsulWatch,  "consulwatch_timeout_sec", OverrideConfig, kv)
+		setConfigKV(&ret.ConsulAddr, "address", OverrideConfig, kv)
+		setConfigKV(&ret.ConsulDC, "dc", OverrideConfig, kv)
+		setConfigKV(&ret.ConsulToken, "token", OverrideConfig, kv)
+		setConfigKV(&ret.IPSetDir, "ipsets", OverrideConfig, kv)
+		setConfigKV(&ret.ServicesDir, "services", OverrideConfig, kv)
+		setConfigKV(&ret.RulesPath, "rules", OverrideConfig, kv)
+		setConfigKV(&ret.NodeName, "nodename", OverrideConfig, kv)
+		setConfigKV(&ret.NodeDC, "nodedc", OverrideConfig, kv)
+		setConfigKVSeconds(&ret.Timeout.Consul, "consul_timeout_sec", OverrideConfig, kv)
+		setConfigKVSeconds(&ret.Timeout.ConsulWatch, "consulwatch_timeout_sec", OverrideConfig, kv)
 
 		if _, ok := kv["fail"]; ok {
 			LogError("[Config] you must edit your Config file before proceed")
@@ -166,7 +165,7 @@ func setConfigKVSeconds(dest *time.Duration, key string, kvs ...map[string]strin
 	for _, kv := range kvs {
 		if value, ok := kv[key]; ok {
 			if i, err := strconv.Atoi(value); err == nil {
-				*dest = time.Duration( i ) * time.Second
+				*dest = time.Duration(i) * time.Second
 				return
 			}
 		}
