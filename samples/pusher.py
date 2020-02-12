@@ -77,7 +77,7 @@ def services_rm(*args):
         if n == args[0]:
             lc.agent.service.deregister(s[x]['ID'])
             print("Service", n, "removed")
-            c.kv.delete(key=genpath(3, n), recurse=True, dc='main')
+            c.kv.delete(key=genpath(3, n), recurse=True, dc=dc)
             print("KV for ", n, "removed")
 
 
@@ -90,7 +90,7 @@ def clients_list(*args):
         level = [1, 2, 3]
     for v in level:
         path = genpath(v, args[0])
-        idx, keys = c.kv.get(path, dc='main', keys=True)
+        idx, keys = c.kv.get(path, dc=dc, keys=True)
         if keys:
             print(path)
             print("\n".join([' *' + x.replace(path, "") for x in keys]))
@@ -109,7 +109,7 @@ def clients_add(*args):
         expiry = 3600 * 24 + int(time.time())
     path = genpath(args[2], args[0])
     path += args[1]
-    c.kv.put(key=path, value=str(expiry), dc='main')
+    c.kv.put(key=path, value=str(expiry), dc=dc)
     return print("Added {} to {} with expiry={}".format(args[1], path, expiry))
     pass
 
@@ -125,7 +125,7 @@ def clients_rm(*args):
         path = genpath(v, args[0])
         path += args[1]
         print("Deleting", path)
-        c.kv.delete(key=path, dc='main')
+        c.kv.delete(key=path, dc=dc)
     # show out
 
 
@@ -149,9 +149,14 @@ if __name__ == '__main__':
         cfg["dc"] = consul
     if "token" not in cfg:
         cfg["token"] = None
+    if "verify" not in cfg:
+        cfg["verify"] = False
+    if "cert" not in cfg:
+        cfg["cert"] = None
 
-    c = consul.Consul(host=cfg["host"], port=cfg["port"], token=cfg["token"], dc=cfg["dc"])
-    lc = consul.Consul(host=cfg["host"], port=cfg["port"])
+
+    c = consul.Consul(host=cfg["host"], port=cfg["port"], token=cfg["token"], dc=cfg["dc"], verify=cfg["verify"], cert=cfg["cert"])
+    lc = consul.Consul(host=cfg["host"], port=cfg["port"], verify=cfg["verify"], cert=cfg["cert"])
     conf = lc.agent.self()
     nn = conf["Config"]["NodeName"]
     dc = conf["Config"]["Datacenter"]
