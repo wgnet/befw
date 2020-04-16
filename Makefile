@@ -5,3 +5,4 @@ install:
 	go install ./cmd/befw-cli
 	go install ./cmd/befw-firewalld
 	go install ./cmd/befw-sync
+	go install ./cmd/befw-deny

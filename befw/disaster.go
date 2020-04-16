@@ -1,3 +1,18 @@
+/**
+ * Copyright 2018-2019 Wargaming Group Limited
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+**/
 package befw
 
 import (
@@ -19,14 +34,9 @@ func recoverLastState(configFile string) *state {
 	}
 	LogWarning("recoverLastState() error: ", e.Error())
 	// gen new state
-	ret.IPSets = make(map[string][]string)
-	for _, conf := range staticIPSetList {
-		ret.IPSets[conf.Name] = make([]string, 0)
-	}
-	ret.IPSets["rules_allow"] = append(ret.IPSets["rules_allow"], []string{"10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"}...)
+	ret.Config = createConfig(configFile)
 	ret.NodeServices = make([]service, 0)
 	LogInfo("recoverLastState(): returning default state")
-	ret.Config = createConfig(configFile)
 	return &ret
 }
 

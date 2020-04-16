@@ -28,16 +28,17 @@ import (
 var OverrideConfig = make(map[string]string)
 
 type config struct {
-	ConsulAddr    string
-	ConsulDC      string
-	NodeName      string
-	NodeDC        string
-	ConsulToken   string
-	ServicesDir   string
-	IPSetDir      string
-	RulesPath     string
-	StaticSetList []staticIPSetConf
-	Timeout       befwConfigTimoutType
+	ConsulAddr     string
+	ConsulDC       string
+	NodeName       string
+	NodeDC         string
+	ConsulToken    string
+	ServicesDir    string
+	IPSetDir       string
+	RulesPath      string
+	WhitelistIPSet []string
+	StaticSetList  []staticIPSetConf
+	Timeout        befwConfigTimoutType
 }
 
 type befwServiceProto string
@@ -82,13 +83,14 @@ func (self *port) toString() string {
 
 func createConfig(configFile string) *config {
 	ret := &config{
-		ConsulAddr:    consulAddress,
-		ConsulDC:      aclDatacenter,
-		ConsulToken:   "",
-		IPSetDir:      staticIpsetPath,
-		ServicesDir:   staticServicesPath,
-		RulesPath:     staticRulesPath,
-		StaticSetList: staticIPSetList, // default, TODO: make a Config
+		ConsulAddr:     consulAddress,
+		ConsulDC:       aclDatacenter,
+		ConsulToken:    "",
+		IPSetDir:       staticIpsetPath,
+		ServicesDir:    staticServicesPath,
+		RulesPath:      staticRulesPath,
+		WhitelistIPSet: make([]string, 0),
+		StaticSetList:  staticIPSetList, // default, TODO: make a Config
 		Timeout: befwConfigTimoutType{
 			Consul:      5 * 60 * time.Second,
 			ConsulWatch: 10 * 60 * time.Second,
@@ -129,8 +131,13 @@ func createConfig(configFile string) *config {
 		}
 		n := 3
 		for k, v := range kv {
-			if strings.HasPrefix(k, "set.") {
-				set := staticIPSetConf{Name: strings.TrimPrefix(k, "set.")}
+			if confSetPrefix + allowIPSetName == k {
+				v0 := strings.Split(v, ";")
+				ret.WhitelistIPSet = v0
+				continue
+			}
+			if strings.HasPrefix(k, confSetPrefix) {
+				set := staticIPSetConf{Name: strings.TrimPrefix(k, confSetPrefix)}
 				v0 := strings.Split(v, ";")
 				if len(v0) == 1 {
 					set.Priority = n

@@ -40,11 +40,15 @@ COMMIT
 `
 	packageName   = "befw-firewalld"
 	consulAddress = "127.0.0.1:8500"
+
+	allowIPSetName = "rules_allow"
+	confSetPrefix  = "set."
 )
 
+var mandatoryIPSet = []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"}  // "shoot yourself in the foot"-protection
 var staticIPSetList = []staticIPSetConf{
 	{
-		Name:     "rules_allow",
+		Name:     allowIPSetName,
 		Priority: 1,
 		Target:   "ACCEPT",
 	},

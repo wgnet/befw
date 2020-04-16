@@ -271,6 +271,7 @@ func refresh(configFile string) (retState *state, retError error) {
 			if e := recover(); e != nil {
 				LogWarning("[BEFW] Recovering from error: ", e)
 				state = recoverLastState(configFile)
+				state.applyWhitelistIPSet()
 				err := state.applyState()
 				if err != nil {
 					LogWarning("[BEFW] Error recovering last state: ", err.Error())
@@ -286,6 +287,7 @@ func refresh(configFile string) (retState *state, retError error) {
 		LogWarning("Can't refresh state: ", err.Error())
 		return nil, err
 	}
+	//state.applyWhitelistIPSet() 
 	if err := state.applyState(); err != nil {
 		LogWarning("Can't apply state: ", err.Error())
 		return state, err
@@ -550,4 +552,21 @@ func DeregisterService(configFile, name string) error {
 	} else {
 		return e
 	}
+}
+
+func (state *state) applyWhitelistIPSet() {
+	if state.IPSets == nil {
+		state.IPSets = make(map[string][]string)
+	}
+	for _, conf := range staticIPSetList {
+		if _, ok := state.IPSets[conf.Name]; !ok {
+			state.IPSets[conf.Name] = make([]string, 0)
+		}
+
+	}
+	state.IPSets[allowIPSetName] = append(state.IPSets[allowIPSetName], mandatoryIPSet...)
+	if state.Config == nil || state.Config.WhitelistIPSet == nil{
+		return
+	}
+	state.IPSets[allowIPSetName] = append(state.IPSets[allowIPSetName], state.Config.WhitelistIPSet...)
 }
