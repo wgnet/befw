@@ -24,8 +24,8 @@ const (
 `
 	iptablesRulesLine = `
 # {NAME}
--A BEFW -p {PROTO} --dport {PORT} -m set --set {NAME} src -j ACCEPT
--A BEFW -p {PROTO} --dport {PORT} -j DROP
+-A BEFW -p {PROTO} -m multiport --dports {PORTS} -m set --set {NAME} src -j ACCEPT
+-A BEFW -p {PROTO} -m multiport --dports {PORTS} -j DROP
 # /{NAME}
 `
 	iptablesRulesFooter = `

@@ -2,7 +2,7 @@
 {
   "header": "\n# BEFW IPTABLES RULES @ {DATE}\n*filter\n:BEFW - [0:0]\n-F BEFW\n",
   "footer": "\nCOMMIT\n# /BEFW IPTABLES RULES @ {DATE}\n",
-  "rule_service": "\n# {NAME}\n-A BEFW -p {PROTO} --dport {PORT} -m set --match-set {NAME} src -j ACCEPT\n-A BEFW -p {PROTO} --dport {PORT} -j NFLOG --nflog-group 402\n-A BEFW -p {PROTO} --dport {PORT} -j REJECT\n# / {NAME}\n",
+  "rule_service": "\n# {NAME}\n-A BEFW -p {PROTO} -m multiport --dports {PORTS} -m set --match-set {NAME} src -j ACCEPT\n-A BEFW -p {PROTO} -m multiport --dports {PORTS} -j NFLOG --nflog-group 402\n-A BEFW -p {PROTO} -m multiport --dports {PORTS} -j REJECT\n# / {NAME}\n",
   "rule_allow": "\n-A BEFW -m set --match-set rules_allow src -j ACCEPT\n",
   "rule_deny": "\n-A BEFW -m set --match-set rules_deny src -j DROP\n"
 }

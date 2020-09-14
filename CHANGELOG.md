@@ -1,3 +1,6 @@
+### 0.1.8
+- Add IPtables rule mutliport support (use {PORTS} template)
+
 ### 0.1.7
 - debug log is now hidden in production
 - new config options & timeouts
