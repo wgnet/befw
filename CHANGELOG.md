@@ -1,3 +1,6 @@
+### 0.1.5
+- Add IPtables rule mutliport support (use {PORTS} template)
+
 ### 0.1.4
 - befw now uses stale to get updates faster
 - new paths: $ipset$ for ipsets and $service$ for services

@@ -29,6 +29,11 @@ import (
 	"time"
 )
 
+type IptablesPort struct {
+    Port string
+    Proto string
+}
+
 type IptablesRules struct {
 	Header string `json:"header"`
 	Footer string `json:"footer"`
@@ -76,24 +81,60 @@ func (state *state) generateRules() string {
 		}
 	}
 	for _, serv := range state.NodeServices {
-		if state.IPSets[serv.ServiceName] != nil {
-			strings.NewReplacer(
-				"{NAME}", cutIPSet(serv.ServiceName),
-				"{PORT}", strconv.Itoa(int(serv.ServicePort)),
-				"{PROTO}", string(serv.ServiceProtocol)).WriteString(result, rules.Line)
-			if serv.ServicePorts != nil {
-				for _, port := range serv.ServicePorts {
-					strings.NewReplacer(
-						"{NAME}", cutIPSet(serv.ServiceName),
-						"{PORT}", strconv.Itoa(int(port.Port)),
-						"{PROTO}", string(port.PortProto)).WriteString(result, rules.Line)
-				}
-			}
-		}
+        if state.IPSets[serv.ServiceName] == nil { continue }
+
+        name := cutIPSet(serv.ServiceName)
+        var ports []IptablesPort = fetchServicePorts(serv, rules.Line)
+
+        // Write rule lines
+        for _, line := range ports {
+            strings.NewReplacer(
+                "{NAME}", name,
+                "{PORT}", line.Port,
+                "{PORTS}", line.Port,
+                "{PROTO}", line.Proto,
+            ).WriteString( result, rules.Line )
+        }
 	}
 	replacer1.WriteString(result, rules.Footer)
 	return result.String()
 }
+
+func fetchServicePorts(serv service, template string) []IptablesPort {
+    // Group ports by protocol:
+    portsByProto := make( map[string][]string )
+    portsByProto[string(serv.ServiceProtocol)] = append(
+        portsByProto[string(serv.ServiceProtocol)],
+        strconv.Itoa(int(serv.ServicePort)) )
+    if serv.ServicePorts != nil {
+        for _, port := range serv.ServicePorts {
+            proto := string(port.PortProto)
+            portsByProto[proto] = append(portsByProto[proto], strconv.Itoa(int(port.Port)))
+        }
+    }
+
+    // Generate IptablesPort items:
+    var lines []IptablesPort
+    for proto, ports := range portsByProto {
+        if strings.Contains(template, "{PORTS}") {
+            // multiport rules
+            lines = append(lines, IptablesPort{
+                Port: strings.Join(ports, ","),
+                Proto: proto,
+            })
+        } else {
+            // legacy rules support
+            for _, port := range ports {
+                lines = append(lines, IptablesPort{
+                    Port: port,
+                    Proto: proto,
+                })
+            }
+        }
+    }
+    return lines
+}
+
 
 func applyRules(rules string) error {
 	stdout := new(strings.Builder)
