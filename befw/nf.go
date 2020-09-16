@@ -172,11 +172,11 @@ func cleanupMissing() {
 	serviceClientsLock.Lock()
 	defer serviceClientsLock.Unlock()
 	for _, v := range serviceClients {
-		for i, _ := range v.clients {
+		for i := range v.clients {
 			delete(v.clients, i)
 		}
 	}
-	for i, _ := range serviceNil.clients {
+	for i := range serviceNil.clients {
 		delete(serviceNil.clients, i)
 	}
 	LogInfo("[NF] Services stats have been wiped")

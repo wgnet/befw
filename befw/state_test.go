@@ -61,6 +61,6 @@ func TestWhitelistConst(t *testing.T) {
 		t.Error("state.IPSets[ allowIPSetName ] is not exists")
 	}
 	if !is10Net || !isLocalhost {
-		t.Error( "state.IPSets[ allowIPSetName ] must contain 10.0.0.0/8 and 192.168.0.0/16" )
+		t.Error("state.IPSets[ allowIPSetName ] must contain 10.0.0.0/8 and 192.168.0.0/16")
 	}
 }

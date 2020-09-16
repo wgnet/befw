@@ -68,7 +68,7 @@ func help(args []string) error {
 	fmt.Printf("Help: %s help <command>\n", os.Args[0])
 	fmt.Printf("Commands: ")
 	_f := true
-	for c, _ := range commands {
+	for c := range commands {
 		if !_f {
 			fmt.Printf(", ")
 		} else {

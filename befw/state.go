@@ -287,7 +287,7 @@ func refresh(configFile string) (retState *state, retError error) {
 		LogWarning("Can't refresh state: ", err.Error())
 		return nil, err
 	}
-	//state.applyWhitelistIPSet() 
+	//state.applyWhitelistIPSet()
 	if err := state.applyState(); err != nil {
 		LogWarning("Can't apply state: ", err.Error())
 		return state, err
@@ -565,7 +565,7 @@ func (state *state) applyWhitelistIPSet() {
 
 	}
 	state.IPSets[allowIPSetName] = append(state.IPSets[allowIPSetName], mandatoryIPSet...)
-	if state.Config == nil || state.Config.WhitelistIPSet == nil{
+	if state.Config == nil || state.Config.WhitelistIPSet == nil {
 		return
 	}
 	state.IPSets[allowIPSetName] = append(state.IPSets[allowIPSetName], state.Config.WhitelistIPSet...)

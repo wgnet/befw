@@ -23,11 +23,11 @@ import (
 
 func TestNet2Strings(t *testing.T) {
 	table := map[*net.IPNet]string{
-		&net.IPNet{
+		{
 			IP:   net.IPv4(192, 168, 0, 5),
 			Mask: net.IPv4Mask(255, 255, 255, 0),
 		}: "192.168.0.0/24",
-		&net.IPNet{
+		{
 			IP:   net.IPv4(192, 168, 0, 1),
 			Mask: net.IPv4Mask(255, 255, 255, 255),
 		}: "192.168.0.1/32",
@@ -47,15 +47,15 @@ func TestNet2Strings(t *testing.T) {
 
 func TestPath2ipnet(t *testing.T) {
 	table := map[string]*net.IPNet{
-		"befw/$alias$/$test$/192.168.0.5/24": &net.IPNet{
+		"befw/$alias$/$test$/192.168.0.5/24": {
 			IP:   net.IPv4(192, 168, 0, 0),
 			Mask: net.IPv4Mask(255, 255, 255, 0),
 		},
-		"befw/sercvice_tcp_2200/192.168.0.5": &net.IPNet{
+		"befw/sercvice_tcp_2200/192.168.0.5": {
 			IP:   net.IPv4(192, 168, 0, 5),
 			Mask: net.IPv4Mask(255, 255, 255, 255),
 		},
-		"befw/sercvice_tcp_2200/10.0.0.5/8": &net.IPNet{
+		"befw/sercvice_tcp_2200/10.0.0.5/8": {
 			IP:   net.IPv4(10, 0, 0, 0),
 			Mask: net.IPv4Mask(255, 0, 0, 0),
 		},

@@ -73,7 +73,7 @@ func (conf *syncConfig) requestPuppetDB() []*syncData {
 	if conf.lastCounter < 360 {
 		if conf.lastResult != nil {
 			if len(toSort) == len(conf.lastResult) {
-				for i, _ := range toSort {
+				for i := range toSort {
 					if toSort[i] != conf.lastResult[i] {
 						isEqual = false
 						break

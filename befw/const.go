@@ -22,7 +22,7 @@ const (
 	aclDatacenter             = "consul"
 	iptablesStaticSet         = `-I BEFW {PRIORITY} -m set --match-set {NAME} src -j {TARGET}
 `
-	iptablesRulesLine         = `
+	iptablesRulesLine = `
 # {NAME}
 -A BEFW -p {PROTO} --dport {PORT} -m set --set {NAME} src -j ACCEPT
 -A BEFW -p {PROTO} --dport {PORT} -j DROP
@@ -45,7 +45,7 @@ COMMIT
 	confSetPrefix  = "set."
 )
 
-var mandatoryIPSet = []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"}  // "shoot yourself in the foot"-protection
+var mandatoryIPSet = []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"} // "shoot yourself in the foot"-protection
 var staticIPSetList = []staticIPSetConf{
 	{
 		Name:     allowIPSetName,

@@ -46,7 +46,7 @@ func sleepIfNoChanges(state *state) {
 		//		}
 		//		time.Sleep(time.Duration(sleep) * time.Second)
 		break
-	case <-time.After( state.Config.Timeout.ConsulWatch ):
+	case <-time.After(state.Config.Timeout.ConsulWatch):
 		break
 	}
 	cleanupChannel()
@@ -67,20 +67,17 @@ func cleanupChannel() {
 
 func (this *config) startFileWatcher() {
 
-	if err := notify.Watch(this.IPSetDir, notifyChannel, notify.Remove, notify.Write);
-		err != nil {
+	if err := notify.Watch(this.IPSetDir, notifyChannel, notify.Remove, notify.Write); err != nil {
 		LogWarning(err)
 	} else {
 		LogDebug("[Watcher] Start watching", this.IPSetDir)
 	}
-	if err := notify.Watch(this.RulesPath, notifyChannel, notify.All);
-		err != nil {
+	if err := notify.Watch(this.RulesPath, notifyChannel, notify.All); err != nil {
 		LogWarning(err)
 	} else {
 		LogDebug("[Watcher] Start watching", this.RulesPath)
 	}
-	if err := notify.Watch(this.ServicesDir, notifyChannel, notify.Write, notify.Remove);
-		err != nil {
+	if err := notify.Watch(this.ServicesDir, notifyChannel, notify.Write, notify.Remove); err != nil {
 		LogWarning(err)
 	} else {
 		LogDebug("[Watcher] Start watching", this.ServicesDir)
@@ -97,7 +94,7 @@ func consulUpdateWatchers(state *state) {
 		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
 	}
 	if aliasCache != nil {
-		for s, _ := range aliasCache {
+		for s := range aliasCache {
 			keys = append(keys, fmt.Sprintf("befw/$alias$/%s", s))
 		}
 	} else {
@@ -113,7 +110,7 @@ func consulUpdateWatchers(state *state) {
 		return false
 	}
 	// 2. stop old watchers not in keys
-	for k, _ := range watchers {
+	for k := range watchers {
 		if !in_keys(k) {
 			watchers[k] <- true
 			delete(watchers, k)
@@ -179,7 +176,7 @@ func watchLocalServices(state *state, chanExit chan bool) {
 
 func watchKVStore(path string, state *state, chanExit chan bool) {
 	var s_idx uint64 = 0
-	if l, m, e := state.consulWatcherClient.KV().List(path, &api.QueryOptions{Datacenter: state.Config.ConsulDC,}); e == nil {
+	if l, m, e := state.consulWatcherClient.KV().List(path, &api.QueryOptions{Datacenter: state.Config.ConsulDC}); e == nil {
 		if len(l) != 0 {
 			s_idx = m.LastIndex
 		}

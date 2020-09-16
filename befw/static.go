@@ -115,7 +115,7 @@ func (this *config) getLocalServices() []service {
 						v.ServiceProtocol = ipprotoTcp
 					}
 					if v.ServicePorts != nil {
-						for i, _ := range v.ServicePorts {
+						for i := range v.ServicePorts {
 							if v.ServicePorts[i].PortProto == "" {
 								v.ServicePorts[i].PortProto = ipprotoTcp
 							}

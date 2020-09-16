@@ -131,7 +131,7 @@ func createConfig(configFile string) *config {
 		}
 		n := 3
 		for k, v := range kv {
-			if confSetPrefix + allowIPSetName == k {
+			if confSetPrefix+allowIPSetName == k {
 				v0 := strings.Split(v, ";")
 				ret.WhitelistIPSet = v0
 				continue

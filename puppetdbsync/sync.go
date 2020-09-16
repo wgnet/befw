@@ -133,17 +133,17 @@ func (conf *syncConfig) makeHotCache() {
 		conf.cache.error = true
 		return
 	} else {
-		for dc, _ := range conf.cache.dcs {
+		for dc := range conf.cache.dcs {
 			delete(conf.cache.dcs, dc)
 		}
 		for _, dc := range dcs {
 			conf.cache.dcs[dc] = nil
 		}
 	}
-	for node, _ := range conf.cache.nodes {
+	for node := range conf.cache.nodes {
 		delete(conf.cache.nodes, node)
 	}
-	for dc, _ := range conf.cache.dcs {
+	for dc := range conf.cache.dcs {
 		q := &api.QueryOptions{
 			Datacenter: dc,
 		}
