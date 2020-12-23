@@ -19,6 +19,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"github.com/wgnet/befw/logging"
 	"net/http"
 	"os"
 	"strings"
@@ -26,7 +27,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/wgnet/befw/befw"
 )
 
 func newSync(config string) *syncConfig {
@@ -39,15 +39,15 @@ func newSync(config string) *syncConfig {
 		timeout:       10 * time.Second, //default
 	}
 	if x, e := os.Stat(config); e != nil {
-		befw.LogError("[Syncer] Can't get config from ", config, ": ", e.Error())
+		logging.LogError("[Syncer] Can't get config from ", config, ": ", e.Error())
 		return nil
 	} else if x.IsDir() {
-		befw.LogError("[Syncer] Config file is a directory: ", config)
+		logging.LogError("[Syncer] Config file is a directory: ", config)
 		return nil
 	}
 	kv := make(map[string]string)
 	if f, e := os.Open(config); e != nil {
-		befw.LogError("[Syncer] Can't open config file ", config, ": ", e.Error())
+		logging.LogError("[Syncer] Can't open config file ", config, ": ", e.Error())
 		return nil
 	} else {
 		defer f.Close()
@@ -99,18 +99,18 @@ func newSync(config string) *syncConfig {
 	}
 	var e error
 	if conf.consulClient, e = api.NewClient(consulConfig); e != nil {
-		befw.LogError("[Syncer] Invalid Consul config: ", e.Error())
+		logging.LogError("[Syncer] Invalid Consul config: ", e.Error())
 		return nil
 	}
 	consulConfig.HttpClient.Timeout = 30 * time.Second
 	if conf.consulClientCache, e = api.NewClient(consulConfigCache); e != nil {
-		befw.LogError("[Syncer] Invalid Consul config: ", e.Error())
+		logging.LogError("[Syncer] Invalid Consul config: ", e.Error())
 		return nil
 	}
 	consulConfigCache.HttpClient.Timeout = 30 * time.Second
 
 	if self, e := conf.consulClient.Agent().Self(); e != nil {
-		befw.LogError("[Syncer] Can't connect to Consul: ", e.Error())
+		logging.LogError("[Syncer] Can't connect to Consul: ", e.Error())
 		return nil
 	} else {
 		conf.nodeName = self["Config"]["NodeName"].(string)
@@ -157,7 +157,7 @@ func (conf *syncConfig) makeHotCache() {
 			}
 		}
 	}
-	befw.LogDebug(fmt.Sprintf("[Syncer] Cache updated: %d datacenters, %d nodes",
+	logging.LogDebug(fmt.Sprintf("[Syncer] Cache updated: %d datacenters, %d nodes",
 		len(conf.cache.dcs), len(conf.cache.nodes)))
 }
 
@@ -181,10 +181,10 @@ func (conf *syncConfig) writeSyncData(data *syncData) {
 			Value: []byte(fmt.Sprintf("%d", value)),
 		}, nil)
 		if e != nil {
-			befw.LogWarning("[Syncer] can't write data to KV: ", path, ":", e.Error())
+			logging.LogWarning("[Syncer] can't write data to KV: ", path, ":", e.Error())
 		}
 		conf.services[path] = value
-		befw.LogInfo("[Syncer] wrote ", path, " to KV with value ", value)
+		logging.LogInfo("[Syncer] wrote ", path, " to KV with value ", value)
 	}
 }
 
@@ -198,9 +198,9 @@ func (conf *syncConfig) manageSession() {
 			Address:    conf.nodeAddr,
 			Datacenter: conf.consulDC,
 		}, nil); e != nil {
-			befw.LogWarning("[Syncer] can't register a node!")
+			logging.LogWarning("[Syncer] can't register a node!")
 		}
-		befw.LogDebug("[Syncer] starting session creation")
+		logging.LogDebug("[Syncer] starting session creation")
 		if conf.sessionID == "" {
 			if sess, _, e := conf.consulClient.Session().CreateNoChecks(
 				&api.SessionEntry{
@@ -210,37 +210,37 @@ func (conf *syncConfig) manageSession() {
 				}, &api.WriteOptions{Datacenter: conf.consulDC}); e == nil {
 				conf.sessionID = sess
 			} else {
-				befw.LogWarning("[Syncer] Can't create session: ", e.Error())
+				logging.LogWarning("[Syncer] Can't create session: ", e.Error())
 				errcount++
 				continue
 			}
 		} else {
 			if se, _, e := conf.consulClient.Session().Info(conf.sessionID, nil); e != nil {
 				conf.sessionID = ""
-				befw.LogDebug("[Syncer] error while getting session: ", conf.sessionID, ", ", e.Error())
+				logging.LogDebug("[Syncer] error while getting session: ", conf.sessionID, ", ", e.Error())
 				errcount++
 				continue
 			} else if se == nil {
 				conf.sessionID = ""
-				befw.LogDebug("[Syncer] Can't find session:", conf.sessionID)
+				logging.LogDebug("[Syncer] Can't find session:", conf.sessionID)
 				errcount++
 				continue
 			}
 			if se, _, e := conf.consulClient.Session().Renew(conf.sessionID, nil); e != nil {
 				conf.sessionID = ""
-				befw.LogDebug("[Syncer] error while renewning session: ", conf.sessionID, ", ", e.Error())
+				logging.LogDebug("[Syncer] error while renewning session: ", conf.sessionID, ", ", e.Error())
 				errcount++
 				continue
 			} else if se == nil {
 				conf.sessionID = ""
-				befw.LogDebug("[Syncer] Can't find session:", conf.sessionID)
+				logging.LogDebug("[Syncer] Can't find session:", conf.sessionID)
 				errcount++
 				continue
 			}
 		}
 		break
 	}
-	befw.LogDebug("[Syncer] got session ", conf.sessionID)
+	logging.LogDebug("[Syncer] got session ", conf.sessionID)
 }
 
 func (conf *syncConfig) getSessionHolder(session string) string {
@@ -260,19 +260,19 @@ func (conf *syncConfig) manageSessionLock() bool {
 				Value:   []byte(conf.nodeName),
 				Session: conf.sessionID,
 			}, &api.WriteOptions{Datacenter: conf.consulDC}); e != nil {
-			befw.LogWarning("[Syncer] Can't create lock:", e.Error())
+			logging.LogWarning("[Syncer] Can't create lock:", e.Error())
 			return false
 		} else {
 			if !v {
 				if kv, _, e := conf.consulClient.KV().Get("befw/.lock", nil); e == nil {
 					if kv.Session != "" {
 						if si := conf.getSessionHolder(kv.Session); si != "" {
-							befw.LogInfo("[Syncer] key is locked by ", si)
+							logging.LogInfo("[Syncer] key is locked by ", si)
 						}
 					}
 				}
 			} else {
-				befw.LogInfo("[Syncer] Lock acquired by me")
+				logging.LogInfo("[Syncer] Lock acquired by me")
 			}
 			return v
 		}

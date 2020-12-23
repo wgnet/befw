@@ -19,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hashicorp/consul/api"
-	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"net"
 	"time"
 )
@@ -57,7 +57,7 @@ func doBan(record *DenyRecord) error {
 		)
 		if e == nil {
 			go replyCommit(record)
-			befw.LogInfo("[DenyAPI] ban applied: ", record)
+			logging.LogInfo("[DenyAPI] ban applied: ", record)
 		} else {
 			return e
 		}
@@ -78,10 +78,10 @@ func Run() {
 	if client, e = api.NewClient(conf); e == nil {
 		conf.HttpClient.Timeout = config.Timeout
 	} else {
-		befw.LogError("[DenyAPI] consul client setup failed: ", e.Error())
+		logging.LogError("[DenyAPI] consul client setup failed: ", e.Error())
 	}
 	if e = prepareSignKey(); e != nil {
-		befw.LogError("[DenyAPI] pgp setup failed: ", e.Error())
+		logging.LogError("[DenyAPI] pgp setup failed: ", e.Error())
 	}
 	pgpcache.refresh()
 	go func() {
@@ -92,9 +92,9 @@ func Run() {
 	}()
 	for {
 		if e := runGit(doBan); e != nil {
-			befw.LogWarning("[DenyAPI] runGit failed: ", e.Error())
+			logging.LogWarning("[DenyAPI] runGit failed: ", e.Error())
 		} else {
-			befw.LogDebug("[DenyAPI] runGit completed")
+			logging.LogDebug("[DenyAPI] runGit completed")
 		}
 		time.Sleep(30 * time.Second)
 	}

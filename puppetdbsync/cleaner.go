@@ -17,6 +17,7 @@ package puppetdbsync
 
 import (
 	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"strconv"
 	"time"
 )
@@ -41,7 +42,7 @@ func (conf *syncConfig) wipeExpired() error {
 	for k := range del {
 		_, e := conf.consulClient.KV().Delete(k, nil)
 		if e == nil {
-			befw.LogInfo("[Syncer] wiping expired record: ", k)
+			logging.LogInfo("[Syncer] wiping expired record: ", k)
 		}
 	}
 	return nil
@@ -51,11 +52,11 @@ func runWipe(conf *syncConfig) {
 	for {
 		e := conf.wipeExpired()
 		if e != nil {
-			befw.LogError("[Syncer] wipeExpired filed: ", e.Error())
+			logging.LogError("[Syncer] wipeExpired filed: ", e.Error())
 		}
 		select {
 		case <-exitChan:
-			befw.LogDebug("[Syncer] wiper exiting...")
+			logging.LogDebug("[Syncer] wiper exiting...")
 			return
 		case <-time.After(time.Hour):
 			continue

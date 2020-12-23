@@ -64,11 +64,6 @@ const (
 	ipprotoUdp befwServiceProto = "udp"
 )
 
-const (
-	DebugConfiguration = iota
-	ProductionConfiguration
-)
-
 const befwNFQueue = 402 // ord(befw)
 const befwState = "/var/run/befw"
 const befwStateSocket = "/var/run/befw/api.sock"
@@ -76,4 +71,3 @@ const befwStateSocket = "/var/run/befw/api.sock"
 const befwStateBin = "/var/run/befw/state.bin"
 const befwNillService = "anyother.service"
 
-var ConfigurationRunning int = ProductionConfiguration

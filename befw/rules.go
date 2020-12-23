@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/wgnet/befw/logging"
 	"io/ioutil"
 	"math/rand"
 	"os/exec"
@@ -30,8 +31,8 @@ import (
 )
 
 type IptablesPort struct {
-    Port string
-    Proto string
+	Port  string
+	Proto string
 }
 
 type IptablesRules struct {
@@ -52,10 +53,10 @@ func defaultRules() *IptablesRules {
 func (this *config) newRules() *IptablesRules {
 	rules := defaultRules()
 	if data, e := ioutil.ReadFile(this.RulesPath); e != nil {
-		LogWarning("[Rules] Can't read", this.RulesPath, "; using default:", e.Error())
+		logging.LogWarning("[Rules] Can't read", this.RulesPath, "; using default:", e.Error())
 	} else {
 		if e := json.Unmarshal(data, rules); e != nil {
-			LogWarning("[Rules] Can't parse", this.RulesPath, "; using default:", e.Error())
+			logging.LogWarning("[Rules] Can't parse", this.RulesPath, "; using default:", e.Error())
 		}
 	}
 	return rules
@@ -81,60 +82,61 @@ func (state *state) generateRules() string {
 		}
 	}
 	for _, serv := range state.NodeServices {
-        if state.IPSets[serv.ServiceName] == nil { continue }
+		if state.IPSets[serv.ServiceName] == nil {
+			continue
+		}
 
-        name := cutIPSet(serv.ServiceName)
-        var ports []IptablesPort = fetchServicePorts(serv, rules.Line)
+		name := cutIPSet(serv.ServiceName)
+		var ports []IptablesPort = fetchServicePorts(serv, rules.Line)
 
-        // Write rule lines
-        for _, line := range ports {
-            strings.NewReplacer(
-                "{NAME}", name,
-                "{PORT}", line.Port,
-                "{PORTS}", line.Port,
-                "{PROTO}", line.Proto,
-            ).WriteString( result, rules.Line )
-        }
+		// Write rule lines
+		for _, line := range ports {
+			strings.NewReplacer(
+				"{NAME}", name,
+				"{PORT}", line.Port,
+				"{PORTS}", line.Port,
+				"{PROTO}", line.Proto,
+			).WriteString(result, rules.Line)
+		}
 	}
 	replacer1.WriteString(result, rules.Footer)
 	return result.String()
 }
 
 func fetchServicePorts(serv service, template string) []IptablesPort {
-    // Group ports by protocol:
-    portsByProto := make( map[string][]string )
-    portsByProto[string(serv.ServiceProtocol)] = append(
-        portsByProto[string(serv.ServiceProtocol)],
-        strconv.Itoa(int(serv.ServicePort)) )
-    if serv.ServicePorts != nil {
-        for _, port := range serv.ServicePorts {
-            proto := string(port.PortProto)
-            portsByProto[proto] = append(portsByProto[proto], strconv.Itoa(int(port.Port)))
-        }
-    }
+	// Group ports by protocol:
+	portsByProto := make(map[string][]string)
+	portsByProto[string(serv.ServiceProtocol)] = append(
+		portsByProto[string(serv.ServiceProtocol)],
+		strconv.Itoa(int(serv.ServicePort)))
+	if serv.ServicePorts != nil {
+		for _, port := range serv.ServicePorts {
+			proto := string(port.PortProto)
+			portsByProto[proto] = append(portsByProto[proto], strconv.Itoa(int(port.Port)))
+		}
+	}
 
-    // Generate IptablesPort items:
-    var lines []IptablesPort
-    for proto, ports := range portsByProto {
-        if strings.Contains(template, "{PORTS}") {
-            // multiport rules
-            lines = append(lines, IptablesPort{
-                Port: strings.Join(ports, ","),
-                Proto: proto,
-            })
-        } else {
-            // legacy rules support
-            for _, port := range ports {
-                lines = append(lines, IptablesPort{
-                    Port: port,
-                    Proto: proto,
-                })
-            }
-        }
-    }
-    return lines
+	// Generate IptablesPort items:
+	var lines []IptablesPort
+	for proto, ports := range portsByProto {
+		if strings.Contains(template, "{PORTS}") {
+			// multiport rules
+			lines = append(lines, IptablesPort{
+				Port:  strings.Join(ports, ","),
+				Proto: proto,
+			})
+		} else {
+			// legacy rules support
+			for _, port := range ports {
+				lines = append(lines, IptablesPort{
+					Port:  port,
+					Proto: proto,
+				})
+			}
+		}
+	}
+	return lines
 }
-
 
 func applyRules(rules string) error {
 	stdout := new(strings.Builder)
@@ -143,12 +145,8 @@ func applyRules(rules string) error {
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
 	if e := cmd.Run(); e != nil {
-		LogWarning("[Rules] Can't refresh rules:", e.Error())
-		if ConfigurationRunning == DebugConfiguration {
-			println(rules)
-			println("------")
-			println(stdout.String())
-		}
+		logging.LogWarning("[Rules] Can't refresh rules:", e.Error())
+		logging.LogDebug(rules, "\n---------\n", stdout.String())
 		return errors.New(stdout.String())
 	}
 	// save it now
@@ -214,7 +212,7 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	for _, cidr := range cidrList {
 		// TODO: more accurate fix
 		if cidr == "0.0.0.0/0" {
-			LogWarning("[Rules] we will replace 0.0.0.0/0 as it's an ipset limitation")
+			logging.LogWarning("[Rules] we will replace 0.0.0.0/0 as it's an ipset limitation")
 			ipset.WriteString(fmt.Sprintln("add", tmpIpsetName, "0.0.0.0/1"))
 			ipset.WriteString(fmt.Sprintln("add", tmpIpsetName, "128.0.0.0/1"))
 			continue
@@ -229,12 +227,8 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
 	if e := cmd.Run(); e != nil {
-		LogWarning("[Rules] IPSet refresh error:", stdout.String())
-		if ConfigurationRunning == DebugConfiguration {
-			println("-------")
-			println(ipset.String())
-			println("-------")
-		}
+		logging.LogWarning("[Rules] IPSet refresh error:", stdout.String())
+		logging.LogDebug(ipset.String())
 		return false, errors.New(stdout.String())
 	}
 	// do fill check
@@ -302,12 +296,12 @@ func checkIsConsistent() {
 	lastContentLock.Lock()
 	defer lastContentLock.Unlock()
 	if !checkIpsetIsConsistent() {
-		LogWarning("[Consist] ipset content was changed, going to restore")
+		logging.LogWarning("[Consist] ipset content was changed, going to restore")
 		restoreLastIPSet()
 		return
 	}
 	if !checkRulesIsConsistent() {
-		LogWarning("[Consist] iptables content was changed, going to restore")
+		logging.LogWarning("[Consist] iptables content was changed, going to restore")
 		restoreLastRules()
 		return
 	}
@@ -321,7 +315,7 @@ func (conf *config) createStaticIPSets() {
 	cmd := exec.Command("/usr/sbin/ipset", "restore", "-exist")
 	cmd.Stdin = &b
 	if e := cmd.Run(); e != nil {
-		LogWarning("[Consist] can't create static ipsets")
+		logging.LogWarning("[Consist] can't create static ipsets")
 		return
 	}
 }

@@ -30,7 +30,7 @@ func main() {
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout between puppetdb re-query")
 	flag.Parse()
 	if *debug {
-		befw.ConfigurationRunning = befw.DebugConfiguration
+		os.Setenv("BEFW_DEBUG", "DEBUG")
 	} else {
 		defer befw.PanicRecovery()
 	}

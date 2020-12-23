@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/armor"
 	"golang.org/x/crypto/openpgp/packet"
@@ -65,12 +65,12 @@ func (cache *pgpCache) refresh() {
 		}
 	}
 	encoder.Close()
-	befw.LogDebug("[DenyAPI] Refreshing PGP cache - ", validKeys, " signed keys")
+	logging.LogDebug("[DenyAPI] Refreshing PGP cache - ", validKeys, " signed keys")
 }
 
 func (cache *pgpCache) verifyCommit(c *object.Commit) (ret bool, keyid uint64) {
 	defer func() {
-		befw.LogDebug("[DenyAPI] Verifying commit ", c.Hash.String(), ": ", ret)
+		logging.LogDebug("[DenyAPI] Verifying commit ", c.Hash.String(), ": ", ret)
 	}()
 	if c.PGPSignature == "" {
 		return false, 0
@@ -212,7 +212,7 @@ func prepareSignKey() error {
 					if _, e := openpgp.CheckDetachedSignature(el, textBuffer, signBuffer); e != nil {
 						return e
 					}
-					befw.LogDebug("[DenyAPI] PGP tests passed")
+					logging.LogDebug("[DenyAPI] PGP tests passed")
 					signingEntity = entity
 				} else {
 					return errors.New("no entities provide inside `pgpkey` file")

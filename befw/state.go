@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hashicorp/consul/api"
+	"github.com/wgnet/befw/logging"
 	"net"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ type state struct {
 	consulWatcherClient *api.Client
 	nodeName            string
 	nodeDC              string
+	localDC             string
 	NodeServices        []service
 	IPSets              map[string][]string
 	lastUpdated         time.Time
@@ -73,10 +75,10 @@ func newState(configFile string) *state {
 	consulWatcherConfig.HttpClient.Timeout = state.Config.Timeout.ConsulWatch
 	// watcher client
 	if e != nil {
-		LogError("Can't create consul client. Error ", e.Error())
+		logging.LogError("Can't create consul client. Error ", e.Error())
 	}
 	if self, e := state.consulClient.Agent().Self(); e != nil {
-		LogError("Can't connect to consul cluster. Error:", e.Error())
+		logging.LogError("Can't connect to consul cluster. Error:", e.Error())
 	} else {
 		if cfg.NodeDC != "" {
 			state.nodeDC = cfg.NodeDC
@@ -90,6 +92,14 @@ func newState(configFile string) *state {
 		}
 		state.nodeDC = strings.ToLower(state.nodeDC)
 		state.nodeName = strings.ToLower(strings.Split(state.nodeName, ".")[0])
+	}
+	state.localDC = state.nodeName
+	// cut first -
+	for i := 0; i < len(state.localDC); i++ {
+		if state.localDC[i] == '-' {
+			state.localDC = state.localDC[:i]
+			break
+		}
 	}
 	state.NodeServices = make([]service, 0)
 	return state
@@ -112,12 +122,12 @@ func (state *state) modifyLocalState() {
 			}
 		}
 		if e := state.consulClient.Agent().ServiceRegister(&v); e != nil {
-			LogWarning(fmt.Sprintf("Can't register service %s @ %d/%s: %s",
+			logging.LogWarning(fmt.Sprintf("Can't register service %s @ %d/%s: %s",
 				localService.ServiceName,
 				localService.ServicePort,
 				localService.ServiceProtocol, e.Error()))
 		} else {
-			LogInfo(fmt.Sprintf("Updating local service %s @ %d/%s", localService.ServiceName,
+			logging.LogInfo(fmt.Sprintf("Updating local service %s @ %d/%s", localService.ServiceName,
 				localService.ServicePort, localService.ServiceProtocol))
 			keys[localService.ServiceName] = &localServices[idx]
 		}
@@ -138,9 +148,9 @@ func (state *state) modifyLocalState() {
 			if sv, ok := keys[key]; !ok || !(sv.ServicePort == uint16(consulService.Port) && sv.ServiceProtocol == proto) {
 				// deregister if has not same service
 				if e := state.consulClient.Agent().ServiceDeregister(key); e == nil {
-					LogInfo(fmt.Sprintf("Deregistering non-existing local service %s @ %d/%s", key, consulService.Port, proto))
+					logging.LogInfo(fmt.Sprintf("Deregistering non-existing local service %s @ %d/%s", key, consulService.Port, proto))
 				} else {
-					LogWarning("Can't deregister local service ", key, ". Error: ", e.Error())
+					logging.LogWarning("Can't deregister local service ", key, ". Error: ", e.Error())
 				}
 			}
 		}
@@ -182,7 +192,7 @@ func (state *state) generateState() error {
 	// 2 download all services
 	registeredServices, e := state.consulClient.Agent().Services()
 	if e != nil {
-		LogError("Can't download services information", e.Error())
+		logging.LogError("Can't download services information", e.Error())
 		return e
 	}
 	for serviceName, serviceData := range registeredServices {
@@ -205,20 +215,30 @@ func (state *state) generateState() error {
 
 		// create ipset-newServiceName
 		for _, path := range paths {
-			for _, kvp := range state.consulKVList(path) {
-				if !BEFWRegexp.MatchString(kvp.Key) {
-					continue // do not fucking try
-				}
-				if isAlias(kvp, path) {
-					newService.serviceClients = append(newService.serviceClients, state.getAlias(kvp, path)...)
-				} else {
-					if kvp.Value == nil {
-						continue
+			if kvs, e := state.consulKVList(path); e != nil {
+				logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
+				return e
+			} else {
+				for _, kvp := range kvs {
+					if !BEFWRegexp.MatchString(kvp.Key) {
+						continue // do not fucking try
 					}
-					if newClient, e := kv2ServiceClient(kvp); e == nil {
-						newService.serviceClients = append(newService.serviceClients, newClient)
+					if isAlias(kvp, path) {
+						if alias, e := state.getAlias(kvp, path); e != nil {
+							logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
+							return e
+						} else {
+							newService.serviceClients = append(newService.serviceClients, alias...)
+						}
 					} else {
-						LogWarning("Can't add service client", newServiceName, e.Error())
+						if kvp.Value == nil {
+							continue
+						}
+						if newClient, e := kv2ServiceClient(kvp); e == nil {
+							newService.serviceClients = append(newService.serviceClients, newClient)
+						} else {
+							logging.LogWarning("Can't add service client", newServiceName, e.Error())
+						}
 					}
 				}
 			}
@@ -226,7 +246,9 @@ func (state *state) generateState() error {
 		state.NodeServices = append(state.NodeServices, newService)
 	}
 	// 3 ok let's append
-	state.getStaticIPSets()
+	if e := state.getStaticIPSets(); e != nil {
+		return e
+	}
 	state.generateIPSets()
 	return nil
 }
@@ -244,10 +266,10 @@ func (state *state) applyState() error {
 	// 4 we have to apply IPSET's and remove all unused
 	for name, set := range state.IPSets {
 		if y, e := applyIPSet(name, set); e != nil {
-			LogWarning("Error while creating ipset", name, e.Error())
+			logging.LogWarning("Error while creating ipset", name, e.Error())
 			return e
 		} else if !y {
-			LogWarning("create_ipset returned false", name)
+			logging.LogWarning("create_ipset returned false", name)
 			return errors.New("create_ipset returned false")
 		}
 	}
@@ -256,7 +278,7 @@ func (state *state) applyState() error {
 		return e
 	}
 	// looks like we're ok
-	LogInfo("BEFW refresh done: ", len(state.NodeServices), "services, ", len(state.IPSets), "IPSets")
+	logging.LogInfo("BEFW refresh done: ", len(state.NodeServices), "services, ", len(state.IPSets), "IPSets")
 	return nil
 
 }
@@ -266,30 +288,28 @@ var aliasCache map[string][]serviceClient
 func refresh(configFile string) (retState *state, retError error) {
 	var state *state
 	aliasCache = make(map[string][]serviceClient) // drop old aliases
-	if ConfigurationRunning != DebugConfiguration {
-		defer func() {
-			if e := recover(); e != nil {
-				LogWarning("[BEFW] Recovering from error: ", e)
-				state = recoverLastState(configFile)
-				state.applyWhitelistIPSet()
-				err := state.applyState()
-				if err != nil {
-					LogWarning("[BEFW] Error recovering last state: ", err.Error())
-				}
-				retState = state
-				retError = errors.New("recovered from panic")
+	defer func() {
+		if e := recover(); e != nil {
+			logging.LogWarning("[BEFW] Recovering from error: ", e)
+			state = recoverLastState(configFile)
+			state.applyWhitelistIPSet()
+			err := state.applyState()
+			if err != nil {
+				logging.LogWarning("[BEFW] Error recovering last state: ", err.Error())
 			}
-		}()
-	}
+			retState = state
+			retError = errors.New("recovered from panic")
+		}
+	}()
 	state = newState(configFile)
 	state.modifyLocalState()
 	if err := state.generateState(); err != nil {
-		LogWarning("Can't refresh state: ", err.Error())
+		logging.LogWarning("Can't refresh state: ", err.Error())
 		return nil, err
 	}
 	//state.applyWhitelistIPSet()
 	if err := state.applyState(); err != nil {
-		LogWarning("Can't apply state: ", err.Error())
+		logging.LogWarning("Can't apply state: ", err.Error())
 		return state, err
 	}
 	state.saveLastState() // always
@@ -301,7 +321,7 @@ func showState(configFile string) (data map[string][]string, e error) {
 	e = nil
 	state := newState(configFile)
 	if err := state.generateState(); err != nil {
-		LogWarning("Can't refresh state: ", err.Error())
+		logging.LogWarning("Can't refresh state: ", err.Error())
 		e = err
 		return
 	}
@@ -322,26 +342,30 @@ func isAlias(pair *api.KVPair, path string) bool {
 	return false
 }
 
-func (state *state) getAlias(pair *api.KVPair, path string) []serviceClient {
+func (state *state) getAlias(pair *api.KVPair, path string) ([]serviceClient, error) {
 	if aliasCache == nil {
 		aliasCache = make(map[string][]serviceClient)
 	}
 	aliasName := strings.Replace(pair.Key, path, "", 1)
 	if v, ok := aliasCache[aliasName]; ok {
-		return v
+		return v, nil
 	}
 	path = fmt.Sprintf("befw/$alias$/%s/", aliasName)
 	res := make([]serviceClient, 0)
-	for _, kvp := range state.consulKVList(path) {
-		if kvp.Value == nil {
-			continue
+	if kvs, e := state.consulKVList(path); e != nil {
+		return nil, e
+	} else {
+		for _, kvp := range kvs {
+			if kvp.Value == nil {
+				continue
+			}
+			if newClient, e := kv2ServiceClient(kvp); e == nil {
+				res = append(res, newClient)
+			}
 		}
-		if newClient, e := kv2ServiceClient(kvp); e == nil {
-			res = append(res, newClient)
-		}
+		aliasCache[aliasName] = res
+		return res, nil
 	}
-	aliasCache[aliasName] = res
-	return res
 }
 func kv2ServiceClient(pair *api.KVPair) (serviceClient, error) {
 	var expiryTime int64
@@ -364,10 +388,8 @@ func (state *state) generateKVPaths(newServiceName string) []string {
 		fmt.Sprintf("befw/$service$/%s/%s/%s/", state.nodeDC, state.nodeName, newServiceName),
 		fmt.Sprintf("befw/$service$/%s/%s/", state.nodeDC, newServiceName),
 		fmt.Sprintf("befw/$service$/%s/", newServiceName),
-		// TODO: remove last 3
-		fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName, newServiceName),
-		fmt.Sprintf("befw/%s/%s/", state.nodeDC, newServiceName),
-		fmt.Sprintf("befw/%s/", newServiceName),
+		fmt.Sprintf("befw/$service$/%s/%s/%s/", state.localDC, state.nodeName, newServiceName),
+		fmt.Sprintf("befw/$service$/%s/%s/", state.localDC, newServiceName),
 	}
 	return ret
 }
@@ -377,16 +399,13 @@ func (state *state) generateIPSetKVPaths(ipsetName string) []string {
 		fmt.Sprintf("befw/$ipset$/%s/%s/%s/", state.nodeDC, state.nodeName, ipsetName),
 		fmt.Sprintf("befw/$ipset$/%s/%s/", state.nodeDC, ipsetName),
 		fmt.Sprintf("befw/$ipset$/%s/", ipsetName),
-		// TODO: remove last 3
-		fmt.Sprintf("befw/%s/%s/%s/", state.nodeDC, state.nodeName, ipsetName),
-		fmt.Sprintf("befw/%s/%s/", state.nodeDC, ipsetName),
-		fmt.Sprintf("befw/%s/", ipsetName),
+		fmt.Sprintf("befw/$ipset$/%s/%s/%s/", state.localDC, state.nodeName, ipsetName),
+		fmt.Sprintf("befw/$ipset$/%s/%s/", state.localDC, ipsetName),
 	}
 	return ret
 }
 
-func (state *state) consulKVList(prefix string) api.KVPairs {
-	ret := make(api.KVPairs, 0)
+func (state *state) consulKVList(prefix string) (api.KVPairs, error) {
 
 	queryOptions := &api.QueryOptions{
 		Datacenter:        state.Config.ConsulDC,
@@ -395,35 +414,43 @@ func (state *state) consulKVList(prefix string) api.KVPairs {
 		RequireConsistent: false,
 	}
 	if r, _, e := state.consulClient.KV().List(prefix, queryOptions); e == nil {
-		return r
-		// TODO: make pre-parsing
+		return r, e
 	} else {
-		LogWarning("Can't obtain data from kv:", prefix, e.Error())
+		return nil, e
 	}
-	return ret
 }
 
-func (state *state) getStaticIPSets() {
+func (state *state) getStaticIPSets() error {
 	for _, set := range state.Config.StaticSetList {
 		state.IPSets[set.Name] = make([]string, 0) // empty? ok!
 		for _, path := range state.generateIPSetKVPaths(set.Name) {
-			for _, kvp := range state.consulKVList(path) {
-
-				if isAlias(kvp, path) {
-					for _, newClient := range state.getAlias(kvp, path) {
-						newClient.appendToIpsetIf(&state.IPSets, set.Name)
-					}
-				} else {
-					if newClient, e := kv2ServiceClient(kvp); e == nil {
-						newClient.appendToIpsetIf(&state.IPSets, set.Name)
+			if kvs, e := state.consulKVList(path); e != nil {
+				logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
+				return e
+			} else {
+				for _, kvp := range kvs {
+					if isAlias(kvp, path) {
+						if alias, e := state.getAlias(kvp, path); e != nil {
+							logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
+							return e
+						} else {
+							for _, newClient := range alias {
+								newClient.appendToIpsetIf(&state.IPSets, set.Name)
+							}
+						}
 					} else {
-						LogWarning("Can't add pre-defined ipset", set, e.Error())
+						if newClient, e := kv2ServiceClient(kvp); e == nil {
+							newClient.appendToIpsetIf(&state.IPSets, set.Name)
+						} else {
+							logging.LogWarning("Can't add pre-defined ipset", set, e.Error())
+						}
 					}
-				}
 
+				}
 			}
 		}
 	}
+	return nil
 }
 
 func (this *serviceClient) appendToIpsetIf(ipsets *map[string][]string, ipset string) {

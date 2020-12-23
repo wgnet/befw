@@ -17,6 +17,7 @@ package main
 
 import (
 	"flag"
+	"github.com/wgnet/befw/logging"
 	"os"
 
 	"github.com/wgnet/befw/befw"
@@ -32,7 +33,7 @@ func main() {
 	flag.Parse()
 
 	if *debug {
-		befw.ConfigurationRunning = befw.DebugConfiguration
+		os.Setenv("BEFW_DEBUG", "DEBUG")
 	} else {
 		defer befw.PanicRecovery()
 	}
@@ -45,11 +46,11 @@ func main() {
 	}
 
 	if !*noroot && os.Getuid() != 0 {
-		befw.LogError("You must be r00t to run as a service")
+		logging.LogError("You must be r00t to run as a service")
 	}
 	if !*nonflog {
 		befw.StartNFLogger()
-		befw.LogInfo("NFLogger started, you can get information from /var/run/befw/*")
+		logging.LogInfo("NFLogger started, you can get information from /var/run/befw/*")
 	}
 	befw.StartService(*config)
 }

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"github.com/hashicorp/consul/api"
 	"github.com/rjeczalik/notify"
+	"github.com/wgnet/befw/logging"
 	"math/rand"
 	"sort"
 	"time"
@@ -68,19 +69,19 @@ func cleanupChannel() {
 func (this *config) startFileWatcher() {
 
 	if err := notify.Watch(this.IPSetDir, notifyChannel, notify.Remove, notify.Write); err != nil {
-		LogWarning(err)
+		logging.LogWarning(err)
 	} else {
-		LogDebug("[Watcher] Start watching", this.IPSetDir)
+		logging.LogDebug("[Watcher] Start watching", this.IPSetDir)
 	}
 	if err := notify.Watch(this.RulesPath, notifyChannel, notify.All); err != nil {
-		LogWarning(err)
+		logging.LogWarning(err)
 	} else {
-		LogDebug("[Watcher] Start watching", this.RulesPath)
+		logging.LogDebug("[Watcher] Start watching", this.RulesPath)
 	}
 	if err := notify.Watch(this.ServicesDir, notifyChannel, notify.Write, notify.Remove); err != nil {
-		LogWarning(err)
+		logging.LogWarning(err)
 	} else {
-		LogDebug("[Watcher] Start watching", this.ServicesDir)
+		logging.LogDebug("[Watcher] Start watching", this.ServicesDir)
 	}
 }
 
@@ -114,7 +115,7 @@ func consulUpdateWatchers(state *state) {
 		if !in_keys(k) {
 			watchers[k] <- true
 			delete(watchers, k)
-			LogDebug("[Watcher] Watch key", k, "deleted from watch list")
+			logging.LogDebug("[Watcher] Watch key ", k, " deleted from watch list")
 		}
 	}
 	// 3. create new chan & watch services
@@ -123,7 +124,7 @@ func consulUpdateWatchers(state *state) {
 			continue
 		}
 		watchers[k] = make(chan bool, 1)
-		LogDebug("[Watcher] Watch key", k, "added to watch list")
+		logging.LogDebug("[Watcher] Watch key ", k, " added to watch list")
 		if k == "localServices" {
 			go watchLocalServices(state, watchers[k])
 		} else {
@@ -147,14 +148,14 @@ func watchLocalServices(state *state, chanExit chan bool) {
 							continue
 						}
 					}
-					LogInfo("[Watcher] Found new/changed service ", name, " on port ", s.Port)
+					logging.LogInfo("[Watcher] Found new/changed service ", name, " on port ", s.Port)
 					services[name] = s.Port
 					notifyChannel <- nil
 					break
 				}
 				for name, port := range services {
 					if _, ok := m[name]; !ok {
-						LogInfo("[Watcher] Found deleted service ", name, " on port ", port)
+						logging.LogInfo("[Watcher] Found deleted service ", name, " on port ", port)
 						delete(services, name)
 						notifyChannel <- nil
 						break
@@ -169,7 +170,7 @@ func watchLocalServices(state *state, chanExit chan bool) {
 			}
 		}
 	} else {
-		LogWarning("[Watcher] LocalServices watcher is dead")
+		logging.LogWarning("[Watcher] LocalServices watcher is dead")
 		return
 	}
 }
@@ -194,13 +195,13 @@ func watchKVStore(path string, state *state, chanExit chan bool) {
 		if l, m, e := state.consulWatcherClient.KV().List(path, q); e == nil {
 			if len(l) == 0 {
 				if s_idx != 0 {
-					LogInfo("[Watcher] KVStore (", path, ") has been purged")
+					logging.LogInfo("[Watcher] KVStore (", path, ") has been purged")
 					s_idx = 0
 					notifyChannel <- nil // was > 0 and got 0
 				}
 			} else {
 				if m.LastIndex > s_idx {
-					LogInfo("[Watcher] KVStore (", path, ") has been changed")
+					logging.LogInfo("[Watcher] KVStore (", path, ") has been changed")
 					s_idx = m.LastIndex
 					notifyChannel <- nil
 				}

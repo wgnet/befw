@@ -16,7 +16,7 @@
 package puppetdbsync
 
 import (
-	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"os"
 	"os/signal"
 	"sync"
@@ -59,7 +59,7 @@ func Run(config string, timeout time.Duration) {
 		canRunMutex.RUnlock()
 		select {
 		case <-exitChan:
-			befw.LogDebug("[Syncer] mainRun exiting...")
+			logging.LogDebug("[Syncer] mainRun exiting...")
 			return
 		case <-time.After(syncConfig.timeout):
 			continue
@@ -72,7 +72,7 @@ func MakeCache(config *syncConfig) {
 		config.makeHotCache()
 		select {
 		case <-exitChan:
-			befw.LogDebug("[Syncer] cacheMaker exiting...")
+			logging.LogDebug("[Syncer] cacheMaker exiting...")
 			return
 		case <-time.After(config.timeout):
 			continue
@@ -86,13 +86,13 @@ func keepLock(config *syncConfig) {
 		canRun = config.manageSessionLock()
 		if lastState != canRun {
 			config.lastCounter = 999
-			befw.LogInfo("[Syncer] We got lock - refreshing puppetdb")
+			logging.LogInfo("[Syncer] We got lock - refreshing puppetdb")
 		}
 		lastState = canRun // state changed
 		canRunMutex.Unlock()
 		select {
 		case <-exitChan:
-			befw.LogDebug("[Syncer] lockKeeper exiting...")
+			logging.LogDebug("[Syncer] lockKeeper exiting...")
 			return
 		case <-time.After(29 * time.Second):
 			continue

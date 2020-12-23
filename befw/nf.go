@@ -20,6 +20,7 @@ import (
 	"github.com/chifflier/nflog-go/nflog"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/wgnet/befw/logging"
 	"os"
 	"os/signal"
 	"path"
@@ -44,7 +45,7 @@ var serviceNil = &serviceUnknownClient{
 func (this *service) registerNflog() {
 	serviceClientsLock.Lock()
 	defer serviceClientsLock.Unlock()
-	LogDebug(fmt.Sprintf("[NF] Registering service %s @ %d/%s", this.ServiceName, this.ServicePort, this.ServiceProtocol))
+	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s @ %d/%s", this.ServiceName, this.ServicePort, this.ServiceProtocol))
 	if _, ok := serviceClients[this.ServiceName]; ok {
 		return
 	}
@@ -145,7 +146,7 @@ func syncData() { // client function
 			}
 			fd.Close()
 		} else {
-			LogWarning("[NF] Can't write data to", filename, ":", e.Error())
+			logging.LogWarning("[NF] Can't write data to", filename, ":", e.Error())
 			break // skip
 		}
 	}
@@ -160,7 +161,7 @@ func syncData() { // client function
 			}
 			fd.Close()
 		} else {
-			LogWarning("[NF] Can't write data to", filename, ":", e.Error())
+			logging.LogWarning("[NF] Can't write data to", filename, ":", e.Error())
 		}
 
 	}
@@ -179,5 +180,5 @@ func cleanupMissing() {
 	for i := range serviceNil.clients {
 		delete(serviceNil.clients, i)
 	}
-	LogInfo("[NF] Services stats have been wiped")
+	logging.LogInfo("[NF] Services stats have been wiped")
 }

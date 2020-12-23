@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/wgnet/befw/logging"
 	"os"
 	"sort"
 	"time"
@@ -28,18 +29,16 @@ func restoreStatus() {
 	e := recover()
 	if e != nil {
 		if err, ok := e.(error); ok {
-			LogWarning("Panic! Recovering self from:", err.Error())
+			logging.LogWarning("Panic! Recovering self from:", err.Error())
 		} else {
-			LogWarning("Panic! Recovering self from:", e)
+			logging.LogWarning("Panic! Recovering self from:", e)
 		}
 		time.Sleep(time.Minute)
 	}
 }
 
 func startService(configFile string) {
-	if ConfigurationRunning != DebugConfiguration {
-		defer restoreStatus()
-	}
+	defer restoreStatus()
 	os.MkdirAll(befwState, 0755)
 	startChecker()
 	var errorCounts = 0
@@ -51,7 +50,7 @@ func startService(configFile string) {
 				errorCounts = 10 // maximum of 5 minutes
 			}
 			sleepTime := errorCounts * 40
-			LogWarning("Error while refresh():", e, "; sleeping for ", sleepTime, " seconds")
+			logging.LogWarning("Error while refresh():", e, "; sleeping for ", sleepTime, " seconds")
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 			continue
 		} else {
@@ -82,7 +81,7 @@ func GenerateConfigs() string {
 	rules := defaultRules()
 	data, err := json.MarshalIndent(&rules, "", " ")
 	if err != nil {
-		LogError("Can't marshall default Config rules")
+		logging.LogError("Can't marshall default Config rules")
 	}
 	return string(data)
 }

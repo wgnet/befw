@@ -18,6 +18,7 @@ package befw
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wgnet/befw/logging"
 	"io/ioutil"
 	"net"
 	"path"
@@ -79,7 +80,7 @@ func path2ipnet(path string) (r *net.IPNet) {
 	}
 	defer func() {
 		if e := recover(); e != nil {
-			LogWarning("Error while running on '", path, "'", e)
+			logging.LogWarning("Error while running on '", path, "'", e)
 			r = nil
 		}
 	}()
@@ -91,7 +92,7 @@ func path2ipnet(path string) (r *net.IPNet) {
 		parts[1] = "32"
 	}
 	if _, cidr, e := net.ParseCIDR(strings.Join(parts, "/")); e != nil {
-		LogWarning("Bad IP syntax: ", path, e.Error())
+		logging.LogWarning("Bad IP syntax: ", path, e.Error())
 		return nil
 	} else {
 		return cidr
@@ -109,7 +110,7 @@ func (this *config) getLocalServices() []service {
 			if data, e := ioutil.ReadFile(name); e == nil {
 				var v service
 				if e := json.Unmarshal(data, &v); e != nil {
-					LogWarning("Bad service file syntax", file.Name(), e)
+					logging.LogWarning("Bad service file syntax", file.Name(), e)
 				} else {
 					if v.ServiceProtocol == "" {
 						v.ServiceProtocol = ipprotoTcp
@@ -122,7 +123,7 @@ func (this *config) getLocalServices() []service {
 
 						}
 					}
-					LogDebug("New service:", v.toString())
+					logging.LogDebug("New service:", v.toString())
 					result = append(result, v)
 				}
 			}

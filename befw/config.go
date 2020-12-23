@@ -18,6 +18,7 @@ package befw
 import (
 	"bufio"
 	"fmt"
+	"github.com/wgnet/befw/logging"
 	"net"
 	"os"
 	"strconv"
@@ -101,7 +102,7 @@ func createConfig(configFile string) *config {
 		return ret
 	}
 	if f, e := os.Open(configFile); e != nil {
-		LogWarning("[Config] can't open", configFile, ":", e.Error())
+		logging.LogWarning("[Config] can't open", configFile, ":", e.Error())
 		return ret
 	} else {
 		defer f.Close()
@@ -127,7 +128,7 @@ func createConfig(configFile string) *config {
 		setConfigKVSeconds(&ret.Timeout.ConsulWatch, "consulwatch_timeout_sec", OverrideConfig, kv)
 
 		if _, ok := kv["fail"]; ok {
-			LogError("[Config] you must edit your Config file before proceed")
+			logging.LogError("[Config] you must edit your Config file before proceed")
 		}
 		n := 3
 		for k, v := range kv {
@@ -150,7 +151,7 @@ func createConfig(configFile string) *config {
 						continue
 					}
 				}
-				LogDebug("New local set: ", set.Name)
+				logging.LogDebug("New local set: ", set.Name)
 				ret.StaticSetList = append(ret.StaticSetList, set)
 				n += 1
 			}

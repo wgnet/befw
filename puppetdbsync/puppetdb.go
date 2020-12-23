@@ -17,7 +17,7 @@ package puppetdbsync
 
 import (
 	"encoding/json"
-	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -32,30 +32,30 @@ func (conf *syncConfig) requestPuppetDB() []*syncData {
 	ret := make([]*syncData, 0)
 	req, e := http.NewRequest("GET", conf.url, nil)
 	if e != nil {
-		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
+		logging.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
 		return ret
 	}
 	req.Header.Set("Connection", "close")
 	if response, e = conf.httpClient.Do(req); e != nil {
-		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
+		logging.LogWarning("[Syncer] Cant request puppetdbsync: ", e.Error())
 		return ret
 	}
 	if response.StatusCode != 200 {
-		befw.LogWarning("[Syncer] Cant request puppetdbsync: ", response.Status)
+		logging.LogWarning("[Syncer] Cant request puppetdbsync: ", response.Status)
 		return ret
 	}
 	// debug
 	var result []map[string]interface{}
 	if data, e := ioutil.ReadAll(response.Body); e != nil {
-		befw.LogWarning("[Syncer] Cant read puppetdbsync response: ", e.Error())
+		logging.LogWarning("[Syncer] Cant read puppetdbsync response: ", e.Error())
 		return ret
 	} else {
 		if e := json.Unmarshal(data, &result); e != nil {
-			befw.LogWarning("[Syncer] Cant parse puppetdbsync response: ", e.Error())
+			logging.LogWarning("[Syncer] Cant parse puppetdbsync response: ", e.Error())
 			return ret
 		}
 	}
-	befw.LogInfo("[Syncer] made a successfull puppetdb request")
+	logging.LogInfo("[Syncer] made a successfull puppetdb request")
 	toSort := make([]string, 0)
 	for _, value := range result {
 		if _, ok := value["parameters"]; ok {

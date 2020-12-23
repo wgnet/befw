@@ -19,6 +19,7 @@ import (
 	"flag"
 	"github.com/wgnet/befw/befw"
 	"github.com/wgnet/befw/denyapi"
+	"os"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 	config := flag.String("config", "/etc/befw.deny.conf", "Path to config file")
 	flag.Parse()
 	if *debug {
-		befw.ConfigurationRunning = befw.DebugConfiguration
+		os.Setenv("BEFW_DEBUG", "DEBUG")
 	} else {
 		defer befw.PanicRecovery()
 	}

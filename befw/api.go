@@ -18,6 +18,7 @@ package befw
 import (
 	"bufio"
 	"fmt"
+	"github.com/wgnet/befw/logging"
 	"net"
 	"os"
 	"strings"
@@ -89,11 +90,11 @@ func startAPIServer() {
 	os.Remove(befwStateSocket)
 	l, e := net.Listen("unix", befwStateSocket)
 	if e != nil {
-		LogWarning("[API]: Can't run local socket: ", e.Error())
+		logging.LogWarning("[API]: Can't run local socket: ", e.Error())
 		return
 	}
 	if e := os.Chmod(befwStateSocket, 0666); e != nil {
-		LogWarning("[API]: Can't change mode of local socket: ", e.Error())
+		logging.LogWarning("[API]: Can't change mode of local socket: ", e.Error())
 	}
 	defer l.Close()
 	ch := make(chan net.Conn, 10)
@@ -107,9 +108,9 @@ func startAPIServer() {
 	for {
 		if c, e := l.Accept(); e == nil {
 			ch <- c
-			LogInfo("[API]: Got connection from:", c.RemoteAddr().String())
+			logging.LogInfo("[API]: Got connection from:", c.RemoteAddr().String())
 		} else {
-			LogWarning("[API]: Error accepting connection: ", e.Error())
+			logging.LogWarning("[API]: Error accepting connection: ", e.Error())
 		}
 	}
 }

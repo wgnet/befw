@@ -18,6 +18,7 @@ package befw
 import (
 	"bytes"
 	"encoding/gob"
+	"github.com/wgnet/befw/logging"
 	"io/ioutil"
 	"os"
 )
@@ -32,11 +33,11 @@ func recoverLastState(configFile string) *state {
 			return &ret
 		}
 	}
-	LogWarning("recoverLastState() error: ", e.Error())
+	logging.LogWarning("recoverLastState() error: ", e.Error())
 	// gen new state
 	ret.Config = createConfig(configFile)
 	ret.NodeServices = make([]service, 0)
-	LogInfo("recoverLastState(): returning default state")
+	logging.LogInfo("recoverLastState(): returning default state")
 	return &ret
 }
 
@@ -45,10 +46,10 @@ func (state *state) saveLastState() {
 	var err error
 	e := gob.NewEncoder(&b)
 	if err = e.Encode(state); err != nil {
-		LogWarning("saveLastState() failed: ", err.Error())
+		logging.LogWarning("saveLastState() failed: ", err.Error())
 		return
 	}
 	if err = ioutil.WriteFile(befwStateBin, b.Bytes(), 0600); err != nil {
-		LogWarning("saveLastState() failed: ", err.Error())
+		logging.LogWarning("saveLastState() failed: ", err.Error())
 	}
 }

@@ -18,7 +18,7 @@ package denyapi
 import (
 	"errors"
 	"fmt"
-	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
@@ -38,7 +38,7 @@ func commitLogDebug(commit *object.Commit, message ...interface{}) {
 }
 
 func hashLogDebug(hash *plumbing.Hash, message ...interface{}) {
-	befw.LogDebug(append([]interface{}{fmt.Sprintf("[DenyAPI][%s] ", hash.String()[:7])}, message...)...)
+	logging.LogDebug(append([]interface{}{fmt.Sprintf("[DenyAPI][%s] ", hash.String()[:7])}, message...)...)
 }
 
 func checkCommit(commit *object.Commit, f func(record *DenyRecord) error) error {
@@ -136,7 +136,7 @@ func afterRun(repository *git.Repository) {
 		select {
 		case commitMessage := <-commitChannel:
 			if e := commitGit(wt, commitMessage); e != nil {
-				befw.LogWarning("[DenyAPI] Reply commit failed: ", e.Error())
+				logging.LogWarning("[DenyAPI] Reply commit failed: ", e.Error())
 			}
 		default:
 			eof = true
@@ -176,7 +176,7 @@ func runGit(f func(record *DenyRecord) error) error {
 			if oldRef.Hash() == ref.Hash() {
 				return nil // nothing changed
 			}
-			befw.LogDebug("[DenyAPI] applying ", oldRef.Hash().String(), " => ", ref.Hash().String())
+			logging.LogDebug("[DenyAPI] applying ", oldRef.Hash().String(), " => ", ref.Hash().String())
 			commitIter, _ := repo.Log(&git.LogOptions{From: ref.Hash()})
 			// revert
 			commits := make([]*object.Commit, 0)

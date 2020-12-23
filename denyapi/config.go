@@ -19,7 +19,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/wgnet/befw/befw"
+	"github.com/wgnet/befw/logging"
 	"net"
 	"os"
 	"reflect"
@@ -142,7 +142,7 @@ func (conf *denyConfig) updateConfig(configFile string) error {
 		}
 	}
 	if f, e := os.Open(configFile); e != nil {
-		befw.LogWarning("[denyConfig] can't open", configFile, ":", e.Error())
+		logging.LogWarning("[denyConfig] can't open", configFile, ":", e.Error())
 		return e
 	} else {
 		defer f.Close()
@@ -192,6 +192,6 @@ func (conf *denyConfig) dump() string {
 
 func MakeConfig(configFile string) {
 	if e := config.updateConfig(configFile); e != nil {
-		befw.LogError(e.Error())
+		logging.LogError(e.Error())
 	}
 }
