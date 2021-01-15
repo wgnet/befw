@@ -36,3 +36,15 @@ func TestGetRandomString(t *testing.T) {
 		}
 	}
 }
+
+func TestGetBinary(t *testing.T) {
+	// get default binaries for any *nix
+	testCases := []string{
+		"sh", "cat", "ls",
+	}
+	for _, k := range testCases {
+		if getBinary(k) == "false" {
+			t.Error("can't find binary ", k)
+		}
+	}
+}

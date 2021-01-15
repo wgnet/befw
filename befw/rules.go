@@ -23,7 +23,9 @@ import (
 	"github.com/wgnet/befw/logging"
 	"io/ioutil"
 	"math/rand"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,9 +140,30 @@ func fetchServicePorts(serv service, template string) []IptablesPort {
 	return lines
 }
 
+func getBinary(name string) string {
+	// use pre-built path with right order
+	path := []string{
+		"/sbin",
+		"/usr/sbin",
+		"/bin",
+		"/usr/bin",
+		"/usr/local/sbin",
+		"/usr/local/bin",
+	}
+	for _, p := range path {
+		v := filepath.Join(p, name)
+		if i, e := os.Stat(v); e == nil {
+			if i.Mode()&0111 != 0 {
+				return v
+			}
+		}
+	}
+	return "false" // command
+}
+
 func applyRules(rules string) error {
 	stdout := new(strings.Builder)
-	cmd := exec.Command("/usr/sbin/iptables-restore", "-n")
+	cmd := exec.Command(getBinary("iptables-restore"), "-n")
 	cmd.Stdin = strings.NewReader(rules)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
@@ -151,7 +174,7 @@ func applyRules(rules string) error {
 	}
 	// save it now
 	stdout.Reset()
-	cmd = exec.Command("/usr/sbin/iptables", "-S", "BEFW")
+	cmd = exec.Command(getBinary("iptables"), "-S", "BEFW")
 	cmd.Stdout = stdout
 	if e := cmd.Run(); e == nil {
 		lastIPTablesContent = stdout.String()
@@ -222,7 +245,7 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	ipset.WriteString(fmt.Sprintln("swap", tmpIpsetName, ipsetName))
 	ipset.WriteString(fmt.Sprintln("destroy", tmpIpsetName))
 	stdout := new(strings.Builder)
-	cmd := exec.Command("/usr/sbin/ipset", "-exist", "restore")
+	cmd := exec.Command(getBinary("ipset"), "-exist", "restore")
 	cmd.Stdin = strings.NewReader(ipset.String())
 	cmd.Stdout = stdout
 	cmd.Stderr = stdout
@@ -233,7 +256,7 @@ func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	}
 	// do fill check
 	stdout.Reset()
-	cmd = exec.Command("/usr/sbin/ipset", "-o", "save", "list", ipsetName)
+	cmd = exec.Command(getBinary("ipset"), "-o", "save", "list", ipsetName)
 	cmd.Stdout = stdout
 	if e := cmd.Run(); e == nil {
 		lastIPSetContent[ipsetName] = stdout.String()
@@ -246,7 +269,7 @@ func checkRulesIsConsistent() bool {
 	if lastIPTablesContent != "" {
 		stdout := new(strings.Builder)
 		stdout.Reset()
-		cmd := exec.Command("/usr/sbin/iptables", "-S", "BEFW")
+		cmd := exec.Command(getBinary("iptables"), "-S", "BEFW")
 		cmd.Stdout = stdout
 		if e := cmd.Run(); e == nil {
 			return lastIPTablesContent == stdout.String()
@@ -261,7 +284,7 @@ func checkIpsetIsConsistent() bool {
 	for ipsetName := range lastIPSetContent {
 		stdout := new(strings.Builder)
 		stdout.Reset()
-		cmd := exec.Command("/usr/sbin/ipset", "-o", "save", "list", ipsetName)
+		cmd := exec.Command(getBinary("ipset"), "-o", "save", "list", ipsetName)
 		cmd.Stdout = stdout
 		if e := cmd.Run(); e == nil {
 			if lastIPSetContent[ipsetName] != stdout.String() {
@@ -284,7 +307,7 @@ func restoreLastIPSet() {
 	for ipsetName := range lastIPSetContent {
 		state := strings.Split(lastIPSetContent[ipsetName], "\n")
 		stdin := strings.NewReader(strings.Join(append(state[:1], append([]string{fmt.Sprintf("flush %s", ipsetName)}, state[2:]...)...), "\n"))
-		cmd := exec.Command("/usr/sbin/ipset", "restore", "-exist")
+		cmd := exec.Command(getBinary("ipset"), "restore", "-exist")
 		cmd.Stdin = stdin
 		if e := cmd.Run(); e != nil {
 		}
@@ -312,7 +335,7 @@ func (conf *config) createStaticIPSets() {
 	for _, staticSet := range conf.StaticSetList {
 		b.WriteString(fmt.Sprintf("create %s hash:net\n", staticSet.Name))
 	}
-	cmd := exec.Command("/usr/sbin/ipset", "restore", "-exist")
+	cmd := exec.Command(getBinary("ipset"), "restore", "-exist")
 	cmd.Stdin = &b
 	if e := cmd.Run(); e != nil {
 		logging.LogWarning("[Consist] can't create static ipsets")
