@@ -1,8 +1,7 @@
 export GO111MODULE=on
 
 install:
-	go mod download
-	go install ./cmd/befw-cli
-	go install ./cmd/befw-firewalld
-	go install ./cmd/befw-sync
-	go install ./cmd/befw-deny
+	go install -mod=vendor ./cmd/befw-cli
+	go install -mod=vendor ./cmd/befw-firewalld
+	go install -mod=vendor ./cmd/befw-sync
+	go install -mod=vendor ./cmd/befw-deny

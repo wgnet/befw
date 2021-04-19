@@ -72,10 +72,10 @@ See [sample config](samples/befw.sync.conf) to get into, but we doubt it is usef
 **N.B.** You can specify world, dc or node level while placing the rules.
 ### Examples
 ```go
-consul.KV().Put("befw/service_tcp_443/192.168.1.1/30", time.now()+2*week)
-consul.KV().Put("befw/dc/service_tcp_443/192.168.1.1/30", time.now()+2*week)
-consul.KV().Put("befw/dc/nodename/service_tcp_443/192.168.1.1/30", time.now()+2*week)
-consul.KV().Put("befw/service_tcp_443/$trusted$", -1) // <0 never expires
+consul.KV().Put("befw/$service$/service_tcp_443/192.168.1.1/30", time.now()+2*week)
+consul.KV().Put("befw/$service$/dc/service_tcp_443/192.168.1.1/30", time.now()+2*week)
+consul.KV().Put("befw/$service$/dc/nodename/service_tcp_443/192.168.1.1/30", time.now()+2*week)
+consul.KV().Put("befw/$service$/service_tcp_443/$trusted$", -1) // <0 never expires
 consul.KV().Put("befw/$alias$/$trusted$/192.168.1.1.30", time.now()+1*hour)
 ```
 ## Tools
@@ -111,7 +111,7 @@ Deleting befw/dc/node/myown_tcp_5672/127.0.0.1
 # no clients found
 $ ./pusher.py clist myown_tcp_5672
 [+] DC= dc , Node= node
-$ 
+$
 ```
 # Changelog
 See [CHANGELOG](CHANGELOG.md).

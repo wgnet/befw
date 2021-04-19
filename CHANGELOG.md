@@ -1,5 +1,7 @@
 ### 0.1.8
 - Add IPtables rule mutliport support (use {PORTS} template)
+- Logging is moved out of befw core
+- Consul KV errors doesn't affect ipset content anymore
 
 ### 0.1.7
 - debug log is now hidden in production

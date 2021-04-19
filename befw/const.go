@@ -28,6 +28,7 @@ const (
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -j DROP
 # /{NAME}
 `
+
 	iptablesRulesFooter = `
 COMMIT
 # /BEFW IPTABLES RULES @ {DATE}

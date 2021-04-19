@@ -114,7 +114,7 @@ func (state *state) modifyLocalState() {
 		v := api.AgentServiceRegistration{
 			Name: localService.ServiceName,
 			Port: (int)(localService.ServicePort),
-			Tags: []string{"local", "befw", (string)(localService.ServiceProtocol)},
+			Tags: []string{"local", "befw", (string)(localService.ServiceProtocol), localService.ServiceMode},
 		}
 		if localService.ServicePorts != nil {
 			for _, p := range localService.ServicePorts {
@@ -174,7 +174,7 @@ func fromTags(tags []string) []port {
 		if len(test) == 2 {
 			if p, e := strconv.Atoi(test[0]); e == nil && p > 0 && p < 65535 {
 				if test[1] == string(ipprotoTcp) || test[1] == string(ipprotoUdp) {
-					newport.Port = p
+					newport.Port = uint16(p)
 					newport.PortProto = befwServiceProto(test[1])
 					result = append(result, newport)
 					newport = port{}
@@ -203,6 +203,7 @@ func (state *state) generateState() error {
 			ServiceName:     serviceName,
 			ServicePort:     uint16(serviceData.Port),
 			ServiceProtocol: getProtocol(serviceData.Tags),
+			ServiceMode:     getMode(serviceData.Tags),
 			serviceClients:  make([]serviceClient, 0),
 			ServicePorts:    fromTags(serviceData.Tags),
 		}
@@ -521,6 +522,15 @@ func getProtocol(tags []string) befwServiceProto {
 		}
 	}
 	return ipprotoTcp // default is TCP
+}
+
+func getMode(tags []string) string {
+	for _, r := range tags {
+		if r == "enforcing" {
+			return "enforcing"
+		}
+	}
+	return "default"
 }
 
 func RegisterService(configFile, name, protocol string, port int) error {

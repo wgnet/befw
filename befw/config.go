@@ -53,6 +53,7 @@ type serviceClient struct {
 
 type service struct {
 	ServiceName     string           `json:"name"`
+	ServiceMode     string           `json:"mode"`
 	ServiceProtocol befwServiceProto `json:"protocol"`
 	ServicePort     uint16           `json:"port"`
 	ServicePorts    []port           `json:"ports"`
@@ -60,7 +61,7 @@ type service struct {
 }
 
 type port struct {
-	Port      int              `json:"port"`
+	Port      uint16           `json:"port"`
 	PortProto befwServiceProto `json:"protocol"`
 }
 

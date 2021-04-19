@@ -41,6 +41,7 @@ type IptablesRules struct {
 	Header string `json:"header"`
 	Footer string `json:"footer"`
 	Line   string `json:"rule_service"`
+	LineE  string `json:"rule_service_e"`
 	Static string `json:"static_set"`
 }
 
@@ -49,6 +50,7 @@ func defaultRules() *IptablesRules {
 		Header: iptablesRulesHeader,
 		Footer: iptablesRulesFooter,
 		Line:   iptablesRulesLine,
+		LineE:  iptablesRulesLine,
 		Static: iptablesStaticSet,
 	}
 }
@@ -89,16 +91,25 @@ func (state *state) generateRules() string {
 		}
 
 		name := cutIPSet(serv.ServiceName)
-		var ports []IptablesPort = fetchServicePorts(serv, rules.Line)
+		ports := fetchServicePorts(serv, rules.Line)
 
 		// Write rule lines
 		for _, line := range ports {
-			strings.NewReplacer(
-				"{NAME}", name,
-				"{PORT}", line.Port,
-				"{PORTS}", line.Port,
-				"{PROTO}", line.Proto,
-			).WriteString(result, rules.Line)
+			if serv.ServiceMode != "enforcing" {
+				strings.NewReplacer(
+					"{NAME}", name,
+					"{PORT}", line.Port,
+					"{PORTS}", line.Port,
+					"{PROTO}", line.Proto,
+				).WriteString(result, rules.Line)
+			} else {
+				strings.NewReplacer(
+					"{NAME}", name,
+					"{PORT}", line.Port,
+					"{PORTS}", line.Port,
+					"{PROTO}", line.Proto,
+				).WriteString(result, rules.LineE)
+			}
 		}
 	}
 	replacer1.WriteString(result, rules.Footer)

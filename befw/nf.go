@@ -24,6 +24,8 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -35,6 +37,8 @@ type serviceUnknownClient struct {
 }
 
 var serviceClients = make(map[string]*serviceUnknownClient)
+var tcpServiceLinks = make(map[uint16]*serviceUnknownClient)
+var udpServiceLinks = make(map[uint16]*serviceUnknownClient)
 var serviceClientsLock = new(sync.RWMutex)
 
 var serviceNil = &serviceUnknownClient{
@@ -53,17 +57,30 @@ func (this *service) registerNflog() {
 		service: this,
 		clients: make(map[string]int),
 	}
-
+	if this.ServiceProtocol == ipprotoTcp {
+		tcpServiceLinks[this.ServicePort] = serviceClients[this.ServiceName]
+	} else {
+		udpServiceLinks[this.ServicePort] = serviceClients[this.ServiceName]
+	}
+	for _, k := range this.ServicePorts {
+		if k.PortProto == ipprotoTcp {
+			tcpServiceLinks[k.Port] = serviceClients[this.ServiceName]
+		} else {
+			udpServiceLinks[k.Port] = serviceClients[this.ServiceName]
+		}
+	}
 }
 
 func findServiceByPort(port uint16, protocol befwServiceProto) *serviceUnknownClient {
 	serviceClientsLock.RLock()
 	defer serviceClientsLock.RUnlock()
-	for _, v := range serviceClients {
-		if v.service.ServiceProtocol == protocol {
-			if v.service.ServicePort == port {
-				return v
-			}
+	if protocol == ipprotoTcp {
+		if _, ok := tcpServiceLinks[port]; ok {
+			return tcpServiceLinks[port]
+		}
+	} else {
+		if _, ok := udpServiceLinks[port]; ok {
+			return udpServiceLinks[port]
 		}
 	}
 	return serviceNil
@@ -129,6 +146,22 @@ func StartNFLogger() {
 	}()
 }
 
+func serviceHeader(svc *service) string {
+	sb := strings.Builder{}
+	sb.WriteString("Service: ")
+	sb.WriteString(svc.ServiceName)
+	sb.WriteString("\nPorts: ")
+	sb.WriteString(strconv.Itoa(int(svc.ServicePort)))
+	sb.WriteByte('/')
+	sb.WriteString(string(svc.ServiceProtocol))
+	for _, k := range svc.ServicePorts {
+		sb.WriteString(", ")
+		sb.WriteString(strconv.Itoa(int(k.Port)))
+		sb.WriteByte('/')
+		sb.WriteString(string(k.PortProto))
+	}
+	return sb.String()
+}
 func syncData() { // client function
 	serviceClientsLock.RLock()
 	defer serviceClientsLock.RUnlock()
@@ -137,9 +170,8 @@ func syncData() { // client function
 		filename := path.Join(befwState, name)
 		os.Remove(filename)
 		if fd, e := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644); e == nil {
-			fmt.Fprintf(fd, "Service: %s\nProtocol: %s\nPort: %d\nTotal missing: %d\n\n",
-				svc.service.ServiceName,
-				svc.service.ServiceProtocol, svc.service.ServicePort,
+			fmt.Fprintf(fd, "%s\nTotal missing: %d\n\n",
+				serviceHeader(svc.service),
 				len(svc.clients))
 			for ip, num := range svc.clients {
 				fmt.Fprintf(fd, " * %s - %d packets\n", ip, num)

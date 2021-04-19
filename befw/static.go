@@ -112,6 +112,9 @@ func (this *config) getLocalServices() []service {
 				if e := json.Unmarshal(data, &v); e != nil {
 					logging.LogWarning("Bad service file syntax", file.Name(), e)
 				} else {
+					if v.ServiceMode == "" {
+						v.ServiceMode = "default"
+					}
 					if v.ServiceProtocol == "" {
 						v.ServiceProtocol = ipprotoTcp
 					}
