@@ -1,3 +1,14 @@
+### 0.1.12
+- Port range (xxx:yyy) support
+
+### 0.1.11
+- Multiport services are now solving conflicts on their own
+### 0.1.10
+- Multiple fixes
+
+### 0.1.9
+- NIDS ( scan detection ) is on and running
+
 ### 0.1.8
 - Add IPtables rule mutliport support (use {PORTS} template)
 - Logging is moved out of befw core

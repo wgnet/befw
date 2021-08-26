@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2019 Wargaming Group Limited
+ * Copyright 2018-2021 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/wgnet/befw/logging"
+	"net"
 	"os"
 	"os/signal"
 	"path"
@@ -37,8 +38,8 @@ type serviceUnknownClient struct {
 }
 
 var serviceClients = make(map[string]*serviceUnknownClient)
-var tcpServiceLinks = make(map[uint16]*serviceUnknownClient)
-var udpServiceLinks = make(map[uint16]*serviceUnknownClient)
+var tcpServiceLinks = make(map[portRange]*serviceUnknownClient)
+var udpServiceLinks = make(map[portRange]*serviceUnknownClient)
 var serviceClientsLock = new(sync.RWMutex)
 
 var serviceNil = &serviceUnknownClient{
@@ -57,10 +58,11 @@ func (this *service) registerNflog() {
 		service: this,
 		clients: make(map[string]int),
 	}
+	defport := portRange(strconv.Itoa(int(this.ServicePort)))
 	if this.ServiceProtocol == ipprotoTcp {
-		tcpServiceLinks[this.ServicePort] = serviceClients[this.ServiceName]
+		tcpServiceLinks[defport] = serviceClients[this.ServiceName]
 	} else {
-		udpServiceLinks[this.ServicePort] = serviceClients[this.ServiceName]
+		udpServiceLinks[defport] = serviceClients[this.ServiceName]
 	}
 	for _, k := range this.ServicePorts {
 		if k.PortProto == ipprotoTcp {
@@ -72,15 +74,16 @@ func (this *service) registerNflog() {
 }
 
 func findServiceByPort(port uint16, protocol befwServiceProto) *serviceUnknownClient {
+	dport := portRange(strconv.Itoa(int(port)))
 	serviceClientsLock.RLock()
 	defer serviceClientsLock.RUnlock()
 	if protocol == ipprotoTcp {
-		if _, ok := tcpServiceLinks[port]; ok {
-			return tcpServiceLinks[port]
+		if _, ok := tcpServiceLinks[dport]; ok {
+			return tcpServiceLinks[dport]
 		}
 	} else {
-		if _, ok := udpServiceLinks[port]; ok {
-			return udpServiceLinks[port]
+		if _, ok := udpServiceLinks[dport]; ok {
+			return udpServiceLinks[dport]
 		}
 	}
 	return serviceNil
@@ -90,15 +93,18 @@ func nflogCallback(payload *nflog.Payload) int {
 	packet := gopacket.NewPacket(payload.Data, layers.LayerTypeIPv4, gopacket.Default)
 	var protocol befwServiceProto
 	var port uint16 = 0
-	var src string
+	var src net.IP
 	if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
 		ip, _ := ipLayer.(*layers.IPv4)
-		src = ip.SrcIP.String()
+		src = ip.SrcIP
 	}
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		protocol = ipprotoTcp
 		tcp, _ := tcpLayer.(*layers.TCP)
 		port = uint16(tcp.DstPort)
+		if tcp.SYN && !tcp.ACK { // synscan only
+			nidsNFCallback(int(port), src)
+		}
 	}
 	if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
 		protocol = ipprotoUdp
@@ -108,10 +114,10 @@ func nflogCallback(payload *nflog.Payload) int {
 	if port > 0 {
 		srv := findServiceByPort(port, protocol)
 		if srv != nil {
-			if _, ok := srv.clients[src]; !ok {
-				srv.clients[src] = 0
+			if _, ok := srv.clients[src.String()]; !ok {
+				srv.clients[src.String()] = 0
 			}
-			srv.clients[src]++
+			srv.clients[src.String()]++
 		}
 	}
 
@@ -156,7 +162,7 @@ func serviceHeader(svc *service) string {
 	sb.WriteString(string(svc.ServiceProtocol))
 	for _, k := range svc.ServicePorts {
 		sb.WriteString(", ")
-		sb.WriteString(strconv.Itoa(int(k.Port)))
+		sb.WriteString(string(k.Port))
 		sb.WriteByte('/')
 		sb.WriteString(string(k.PortProto))
 	}

@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2019 Wargaming Group Limited
+ * Copyright 2018-2021 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,20 +38,22 @@ type IptablesPort struct {
 }
 
 type IptablesRules struct {
-	Header string `json:"header"`
-	Footer string `json:"footer"`
-	Line   string `json:"rule_service"`
-	LineE  string `json:"rule_service_e"`
-	Static string `json:"static_set"`
+	Header   string `json:"header"`
+	Footer   string `json:"footer"`
+	Line     string `json:"rule_service"`
+	LineE    string `json:"rule_service_e"`
+	Static   string `json:"static_set"`
+	NidsLine string `json:"nids_line"`
 }
 
 func defaultRules() *IptablesRules {
 	return &IptablesRules{
-		Header: iptablesRulesHeader,
-		Footer: iptablesRulesFooter,
-		Line:   iptablesRulesLine,
-		LineE:  iptablesRulesLine,
-		Static: iptablesStaticSet,
+		Header:   iptablesRulesHeader,
+		Footer:   iptablesRulesFooter,
+		Line:     iptablesRulesLine,
+		LineE:    iptablesRulesLine,
+		Static:   iptablesStaticSet,
+		NidsLine: iptablesNidsLine,
 	}
 }
 func (this *config) newRules() *IptablesRules {
@@ -63,6 +65,7 @@ func (this *config) newRules() *IptablesRules {
 			logging.LogWarning("[Rules] Can't parse", this.RulesPath, "; using default:", e.Error())
 		}
 	}
+
 	return rules
 }
 
@@ -76,6 +79,12 @@ func (state *state) generateRules() string {
 	result := new(strings.Builder)
 	replacer1 := strings.NewReplacer("{DATE}", time.Now().String())
 	replacer1.WriteString(result, rules.Header)
+	if state.Config.NIDSEnable {
+		result.WriteString(strings.Replace(rules.NidsLine,
+			"{NIDSPORTS}",
+			nidsPortsToString(nidsState.nPorts),
+			-1))
+	}
 	for _, set := range state.Config.StaticSetList {
 		if _, ok := state.IPSets[set.Name]; ok {
 			if set.Target == "NOOP" {
@@ -118,14 +127,14 @@ func (state *state) generateRules() string {
 
 func fetchServicePorts(serv service, template string) []IptablesPort {
 	// Group ports by protocol:
-	portsByProto := make(map[string][]string)
-	portsByProto[string(serv.ServiceProtocol)] = append(
-		portsByProto[string(serv.ServiceProtocol)],
-		strconv.Itoa(int(serv.ServicePort)))
+	portsByProto := make(map[befwServiceProto][]portRange)
+	portsByProto[serv.ServiceProtocol] = append(
+		portsByProto[serv.ServiceProtocol],
+		portRange(strconv.Itoa(int(serv.ServicePort))))
 	if serv.ServicePorts != nil {
 		for _, port := range serv.ServicePorts {
-			proto := string(port.PortProto)
-			portsByProto[proto] = append(portsByProto[proto], strconv.Itoa(int(port.Port)))
+			proto := port.PortProto
+			portsByProto[proto] = append(portsByProto[proto], port.Port)
 		}
 	}
 
@@ -135,15 +144,15 @@ func fetchServicePorts(serv service, template string) []IptablesPort {
 		if strings.Contains(template, "{PORTS}") {
 			// multiport rules
 			lines = append(lines, IptablesPort{
-				Port:  strings.Join(ports, ","),
-				Proto: proto,
+				Port:  strings.Join(PortsAsStrings(ports), ","),
+				Proto: string(proto),
 			})
 		} else {
 			// legacy rules support
 			for _, port := range ports {
 				lines = append(lines, IptablesPort{
-					Port:  port,
-					Proto: proto,
+					Port:  string(port),
+					Proto: string(proto),
 				})
 			}
 		}

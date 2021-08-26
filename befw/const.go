@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2019 Wargaming Group Limited
+ * Copyright 2018-2021 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,9 @@ const (
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -m set --set {NAME} src -j ACCEPT
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -j DROP
 # /{NAME}
+`
+	iptablesNidsLine = `
+-A BEFW -p tcp -m multiport --dports {NIDSPORTS} -j NFLOG --nflog-group 402
 `
 
 	iptablesRulesFooter = `
@@ -71,4 +74,3 @@ const befwStateSocket = "/var/run/befw/api.sock"
 
 const befwStateBin = "/var/run/befw/state.bin"
 const befwNillService = "anyother.service"
-

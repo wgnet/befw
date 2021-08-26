@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2019 Wargaming Group Limited
+ * Copyright 2018-2021 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,6 +64,7 @@ func startService(configFile string) {
 
 func StartService(configFile string) {
 	go startAPIServer()
+	go nidsChecker()
 	for {
 		startService(configFile)
 	}

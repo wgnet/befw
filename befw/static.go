@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2019 Wargaming Group Limited
+ * Copyright 2018-2021 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package befw
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/wgnet/befw/logging"
 	"io/ioutil"
@@ -24,6 +23,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"strconv"
 )
 
 var BEFWRegexp = regexp.MustCompile("^befw/\\S+/(?:[\\d\\.]{7,15}(?:/\\d{1,2})?|\\$\\S+\\$)$")
@@ -101,34 +101,46 @@ func path2ipnet(path string) (r *net.IPNet) {
 
 func (this *config) getLocalServices() []service {
 	result := make([]service, 0)
+	uniqPorts := map[befwServiceProto]map[portRange]bool {
+		ipprotoTcp: make(map[portRange]bool),
+		ipprotoUdp: make(map[portRange]bool),
+	}
 	if files, e := ioutil.ReadDir(this.ServicesDir); e == nil {
+	serviceLoop:
 		for _, file := range files {
 			if !strings.HasSuffix(file.Name(), ".json") {
-				continue
+				continue serviceLoop
 			}
 			name := path.Join(this.ServicesDir, file.Name())
 			if data, e := ioutil.ReadFile(name); e == nil {
-				var v service
-				if e := json.Unmarshal(data, &v); e != nil {
-					logging.LogWarning("Bad service file syntax", file.Name(), e)
-				} else {
-					if v.ServiceMode == "" {
-						v.ServiceMode = "default"
-					}
-					if v.ServiceProtocol == "" {
-						v.ServiceProtocol = ipprotoTcp
-					}
-					if v.ServicePorts != nil {
-						for i := range v.ServicePorts {
-							if v.ServicePorts[i].PortProto == "" {
-								v.ServicePorts[i].PortProto = ipprotoTcp
-							}
-
-						}
-					}
-					logging.LogDebug("New service:", v.toString())
-					result = append(result, v)
+				v, err := ServiceFromJson(data)
+				if err != nil {
+					logging.LogWarning("Bad service file", file.Name(),  err)
+					continue
 				}
+
+				logging.LogDebug("New service:", v.toString())
+				if uniqPorts[v.ServiceProtocol] == nil {
+					uniqPorts[v.ServiceProtocol] = make(map[portRange]bool)
+				}
+				if uniqPorts[v.ServiceProtocol][portRange(strconv.Itoa(int(v.ServicePort)))] {
+					logging.LogWarning("Service ", v.ServiceName, " has overlapping port: ", v.ServicePort, "/", v.ServiceProtocol)
+					continue serviceLoop
+				}
+				uniqPorts[v.ServiceProtocol][portRange(strconv.Itoa(int(v.ServicePort)))] = true
+				if v.ServicePorts != nil {
+					for i := range v.ServicePorts {
+						if uniqPorts[v.ServicePorts[i].PortProto] == nil {
+							uniqPorts[v.ServicePorts[i].PortProto] = make(map[portRange]bool)
+						}
+						if uniqPorts[v.ServicePorts[i].PortProto][v.ServicePorts[i].Port] {
+							logging.LogWarning("Service ", v.ServiceName, " has overlapping port: ", v.ServicePorts[i].Port, "/", v.ServicePorts[i].PortProto)
+							continue serviceLoop
+						}
+						uniqPorts[v.ServicePorts[i].PortProto][v.ServicePorts[i].Port] = true
+					}
+				}
+				result = append(result, *v)
 			}
 		}
 	}

@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2019 Wargaming Group Limited
+ * Copyright 2018-2021 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -118,7 +118,7 @@ func (state *state) modifyLocalState() {
 		}
 		if localService.ServicePorts != nil {
 			for _, p := range localService.ServicePorts {
-				v.Tags = append(v.Tags, p.toString())
+				v.Tags = append(v.Tags, p.toTag())
 			}
 		}
 		if e := state.consulClient.Agent().ServiceRegister(&v); e != nil {
@@ -166,21 +166,12 @@ func inArray(arr []string, elem string) bool {
 	return false
 }
 
-func fromTags(tags []string) []port {
-	result := make([]port, 0)
-	newport := port{}
+func fromTags(tags []string) []befwPort {
+	result := make([]befwPort, 0)
 	for _, tag := range tags {
-		test := strings.Split(tag, "/")
-		if len(test) == 2 {
-			if p, e := strconv.Atoi(test[0]); e == nil && p > 0 && p < 65535 {
-				if test[1] == string(ipprotoTcp) || test[1] == string(ipprotoUdp) {
-					newport.Port = uint16(p)
-					newport.PortProto = befwServiceProto(test[1])
-					result = append(result, newport)
-					newport = port{}
-				}
-			}
-		}
+		newport, err := PortFromTag(tag)
+		if err != nil {continue}
+		result = append(result, *newport)
 	}
 	return result
 }
