@@ -15,46 +15,78 @@
 **/
 package befw
 
-import(
+import (
 	"testing"
 )
 
+// Test bin util.
+func TestCall(t *testing.T) {
+	if !ENABLE_BIN_CALLS {
+		return
+	} // Skip if not allowed
+	// Echo call
+	stdout, err := run(nil, "echo", "42")
+	if err != nil {
+		t.Fail()
+	}
+	if stdout != "42\n" {
+		t.Error("Bad response: `", stdout, "`")
+	}
 
-func TestUnmarshalJson(t *testing.T) {
-	// Basic json
-	jsnService := "{\"name\":\"example\", \"protocol\":\"tcp\", \"port\":12345}"
-	service, err := ServiceFromJson([]byte(jsnService))
-	if err != nil { t.Errorf("Failed to unmarshal: %s", err);return }
-	if service.ServiceName != "example" { t.Errorf("Bad name: %s != %s", service.ServiceName, "example") }
-	if service.ServicePort != 12345 { t.Errorf("Bad port") }
-	if service.ServiceProtocol != "tcp" { t.Errorf("Bad protocol") }
+	// Stdin echo|head test
+	stdin := "123456"
+	stdout, err = run(&stdin, "head", "-c2")
+	if err != nil {
+		t.Fail()
+	}
+	if stdout != "12" {
+		t.Error("Bad response (head): `", stdout, "`")
+	}
 
-	// With ports and range
-	jsnService = "{\"name\":\"example\", \"protocol\":\"tcp\", \"port\":12345, \"ports\":[{\"port\":\"1:42\", \"protocol\":\"udp\"}]}"
-	service, err = ServiceFromJson([]byte(jsnService))
-	if err != nil { t.Errorf("Failed to unmarshal: %s", err);return }
-	if service.ServiceName != "example" { t.Errorf("Bad name: %s != %s", service.ServiceName, "example") }
-	if service.ServicePort != 12345 { t.Errorf("Bad port") }
-	if service.ServiceProtocol != "tcp" { t.Errorf("Bad protocol") }
-	if len(service.ServicePorts) != 1 && string(service.ServicePorts[0].Port) != "1:42" { t.Errorf("Bad ports unmarshalling") }
-
-	// TODO: with bad port/range
-
-	// Default port, protocol from ports
-	jsnService = "{\"name\":\"example\", \"ports\":[{\"port\":\"11:42\", \"protocol\":\"udp\"}]}"
-	service, err = ServiceFromJson([]byte(jsnService))
-	if err != nil { t.Errorf("Failed to unmarshal: %s", err); return }
-	if service.ServiceName != "example" { t.Errorf("Bad name: %s != %s", service.ServiceName, "example") }
-	if service.ServicePort != 11 { t.Errorf("Bad port") }
-	if service.ServiceProtocol != "udp" { t.Errorf("Bad protocol") }
-
-	// No ports, No port - wrong
-	jsnService = "{\"name\":\"example\", \"ports\":[]}"
-	service, err = ServiceFromJson([]byte(jsnService))
-	if err == nil || service != nil { t.Errorf("Expected FAIL on unmarshalling bad JSON") }
+	// Error command
+	_, err = run(nil, "exit", "3")
+	if err == nil {
+		t.Error("Expect error")
+	}
 }
 
-func TestBadBad(t *testing.T) {
-	//t.Errorf("Ok!")
+func TestCutIPSet(t *testing.T) {
+	table := map[string]string{
+		"test_tcp_2200": "test_tcp_2200",
+		"very_long_service_name_abcd_1234_tcp_2200": "ve_lo_se_na_ab_12_tc_2200",
+	}
+	for i, x := range table {
+		if v := correctIPSetName(i); v != x {
+			t.Error("correctIPSetName: ", i, "->", v, "!=", x)
+		}
+	}
 }
 
+func TestGetRandomString(t *testing.T) {
+	for i := 0; i < 255; i++ {
+		if v := getRandomString(); len(v) != 25 {
+			t.Error("Non-25 string:", v)
+		}
+	}
+}
+
+func TestGetBinary(t *testing.T) {
+	// get default binaries for any *nix
+	testCases := []string{
+		"sh", "cat", "ls",
+	}
+	for _, k := range testCases {
+		if getBinary(k) == "false" {
+			t.Error("can't find binary ", k)
+		}
+	}
+}
+
+func TestIsIPv6(t *testing.T) {
+	if isIPv6("1.2.3.4") {
+		t.Fail()
+	}
+	if !isIPv6("::1:5ee:bad:c0de") {
+		t.Fail()
+	}
+}

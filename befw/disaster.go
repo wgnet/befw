@@ -36,7 +36,7 @@ func recoverLastState(configFile string) *state {
 	logging.LogWarning("recoverLastState() error: ", e.Error())
 	// gen new state
 	ret.Config = createConfig(configFile)
-	ret.NodeServices = make([]service, 0)
+	ret.NodeServices = make([]bService, 0)
 	logging.LogInfo("recoverLastState(): returning default state")
 	return &ret
 }

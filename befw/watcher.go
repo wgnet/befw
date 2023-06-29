@@ -92,7 +92,7 @@ func consulUpdateWatchers(state *state) {
 		keys = append(keys, state.generateIPSetKVPaths(set.Name)...)
 	}
 	for _, s := range state.NodeServices {
-		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
+		keys = append(keys, state.generateKVPaths(s.Name)...)
 	}
 	if aliasCache != nil {
 		for s := range aliasCache {
