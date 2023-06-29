@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2021 Wargaming Group Limited
+ * Copyright 2018-2023 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ func recoverLastState(configFile string) *state {
 	logging.LogWarning("recoverLastState() error: ", e.Error())
 	// gen new state
 	ret.Config = createConfig(configFile)
-	ret.NodeServices = make([]service, 0)
+	ret.NodeServices = make([]bService, 0)
 	logging.LogInfo("recoverLastState(): returning default state")
 	return &ret
 }

@@ -15,24 +15,17 @@
 **/
 package befw
 
-import (
-	"fmt"
-	"os"
-)
-
-func PanicRecovery() {
-	if e := recover(); e != nil {
-		var r string
-		switch e.(type) {
-		case error:
-			r = e.(error).Error()
-		case string:
-			r = e.(string)
-		default:
-			r = fmt.Sprint(e)
-
-		}
-		fmt.Fprintf(os.Stderr, "FATAL ERROR: %s\n", r)
-	}
-	os.Exit(1)
+// General interface for firewall management.
+type firewall interface {
+	Apply(*state) error
+	KeepConsistent() error
 }
+
+// TODO: nftables support
+// EXAMPLE:
+//
+//      type fwNftables {  }
+//
+//      func (nft fwNftables) Apply(s *state) error { /* Implement nft calls  * / }
+//      func (nft fwNftables) KeepConsistent() error { /* Implement nft calls  * / }
+//
