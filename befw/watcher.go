@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2021 Wargaming Group Limited
+ * Copyright 2018-2023 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,7 +92,7 @@ func consulUpdateWatchers(state *state) {
 		keys = append(keys, state.generateIPSetKVPaths(set.Name)...)
 	}
 	for _, s := range state.NodeServices {
-		keys = append(keys, state.generateKVPaths(s.ServiceName)...)
+		keys = append(keys, state.generateKVPaths(s.Name)...)
 	}
 	if aliasCache != nil {
 		for s := range aliasCache {

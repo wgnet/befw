@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2021 Wargaming Group Limited
+ * Copyright 2018-2023 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,6 @@ import (
 	"bytes"
 	"net"
 	"testing"
-	"strings"
-	"fmt"
 )
 
 func TestNet2Strings(t *testing.T) {
@@ -61,6 +59,18 @@ func TestPath2ipnet(t *testing.T) {
 			IP:   net.IPv4(10, 0, 0, 0),
 			Mask: net.IPv4Mask(255, 0, 0, 0),
 		},
+		"befw/sercvice_tcp_2200/::1:5ee:bad:c0de/96": {
+			IP:   net.IP{0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x05, 0xee, 0, 0, 0, 0},
+			Mask: net.CIDRMask(96, 128),
+		},
+		"befw/sercvice_tcp_2200/cafe:feed::/127": {
+			IP:   net.IP{0xca, 0xfe, 0xfe, 0xed, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Mask: net.CIDRMask(127, 128),
+		},
+		"befw/sercvice_tcp_2200/::/0": {
+			IP:   net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Mask: net.CIDRMask(0, 128),
+		},
 	}
 	equals := func(a, b *net.IPNet) bool {
 		return a.IP.Equal(b.IP) && bytes.Equal([]byte(a.Mask), []byte(b.Mask))
@@ -70,39 +80,5 @@ func TestPath2ipnet(t *testing.T) {
 			t.Errorf("Value for %s doesn't match: %s != %s", i, x.String(), n)
 		}
 	}
-
-}
-
-func TestTag(t *testing.T) {
-	expected := map[string]string{"11":"udp", "0:65535":"tcp"}
-	for k, v := range expected {
-		port := &befwPort{
-			Port: portRange(k),
-			PortProto: befwServiceProto(v),
-		}
-		expected := fmt.Sprintf("%s/%s", k, v)
-		if port.toTag() != expected { t.Errorf("Wrong tag '%s'; Expected: '%s'", port.toTag(), expected) }
-	}
-
-	tags := []string{"11/tcp", "12/udp", "1:42/tcp", "1:65535/udp"}
-	for _, tag := range tags {
-		newPort, err := PortFromTag(tag)
-		if err != nil || newPort == nil { t.Errorf("Failed PortFromTag result") }
-		p := strings.Split(tag, "/")
-		if string(newPort.Port) != p[0] || string(newPort.PortProto) != p[1] { t.Errorf("Wrong parsed port and proto: %s %s", newPort.Port, newPort.PortProto) }
-	}
-
-	bads := []string{"", "0/tcp", "2:65536/udp", "0:65535/tcp", "33/xdp"}
-	for _, tag := range bads {
-		port, err := PortFromTag(tag)
-		if err == nil || port != nil { t.Errorf("Expected error for bad tag %s", tag) }
-	}
-}
-
-func TestSplitLines(t *testing.T) {
-
-}
-
-func TestFilterStrings(t *testing.T) {
 
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2021 Wargaming Group Limited
+ * Copyright 2018-2023 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,46 +15,141 @@
 **/
 package befw
 
-import(
+import (
+	"regexp"
 	"testing"
 )
 
+func TestIPRegex(t *testing.T) {
+	rx := regexp.MustCompile("^" + REGEXP_IP4 + "$")
+	// IPv4
+	good := []string{"0.0.0.0", "1.2.3.4", "255.255.255.255", "10.0.255.6"}
+	bad := []string{"0.0.0.0.0", "1.2.3", "256.255.255.255", "01.2.3.4", "1.2.3.4.", "1.2.3.4a"}
+	for _, item := range good {
+		if !rx.MatchString(item) {
+			t.Errorf("Expect as good IP: %s", item)
+		}
+	}
+	for _, item := range bad {
+		if rx.MatchString(item) {
+			t.Errorf("Expect as bad IP: %s", item)
+		}
+	}
 
-func TestUnmarshalJson(t *testing.T) {
-	// Basic json
-	jsnService := "{\"name\":\"example\", \"protocol\":\"tcp\", \"port\":12345}"
-	service, err := ServiceFromJson([]byte(jsnService))
-	if err != nil { t.Errorf("Failed to unmarshal: %s", err);return }
-	if service.ServiceName != "example" { t.Errorf("Bad name: %s != %s", service.ServiceName, "example") }
-	if service.ServicePort != 12345 { t.Errorf("Bad port") }
-	if service.ServiceProtocol != "tcp" { t.Errorf("Bad protocol") }
+	// IPv6
+	rx = regexp.MustCompile("^" + REGEXP_IP6 + "$")
+	good = []string{"::", "::1", "cafe::", "1:2:3::7:8", "1:2:3:4:5:6:7:8", "0123:4567:89ab:cdef:0123:4567:89ab:cdef", "CaFe::5eE"}
+	bad = []string{"::1::8", "1:2:3:4:5:6:7:8:9", "0123:4567:89ab:cdef:0123:4567:89ab", "1:2:3:0abc4:5:6:7:8:9", ":CaFe::5eE", ":1:2:3::7:8"}
+	for _, item := range good {
+		if !rx.MatchString(item) {
+			t.Errorf("Expect as good IP: %s", item)
+		}
+	}
+	for _, item := range bad {
+		if rx.MatchString(item) {
+			t.Errorf("Expect as bad IP: %s", item)
+		}
+	}
 
-	// With ports and range
-	jsnService = "{\"name\":\"example\", \"protocol\":\"tcp\", \"port\":12345, \"ports\":[{\"port\":\"1:42\", \"protocol\":\"udp\"}]}"
-	service, err = ServiceFromJson([]byte(jsnService))
-	if err != nil { t.Errorf("Failed to unmarshal: %s", err);return }
-	if service.ServiceName != "example" { t.Errorf("Bad name: %s != %s", service.ServiceName, "example") }
-	if service.ServicePort != 12345 { t.Errorf("Bad port") }
-	if service.ServiceProtocol != "tcp" { t.Errorf("Bad protocol") }
-	if len(service.ServicePorts) != 1 && string(service.ServicePorts[0].Port) != "1:42" { t.Errorf("Bad ports unmarshalling") }
+	// Net32
+	rx = regexp.MustCompile("^" + REGEXP_NET_32 + "$")
+	good = []string{"", "/0", "/1", "/12", "/32"}
+	bad = []string{"/", "/-", "/33", "/128", "/129"}
+	for _, item := range good {
+		if !rx.MatchString(item) {
+			t.Errorf("Expect as good Net32: %s", item)
+		}
+	}
+	for _, item := range bad {
+		if rx.MatchString(item) {
+			t.Errorf("Expect as bad Net32: %s", item)
+		}
+	}
 
-	// TODO: with bad port/range
-
-	// Default port, protocol from ports
-	jsnService = "{\"name\":\"example\", \"ports\":[{\"port\":\"11:42\", \"protocol\":\"udp\"}]}"
-	service, err = ServiceFromJson([]byte(jsnService))
-	if err != nil { t.Errorf("Failed to unmarshal: %s", err); return }
-	if service.ServiceName != "example" { t.Errorf("Bad name: %s != %s", service.ServiceName, "example") }
-	if service.ServicePort != 11 { t.Errorf("Bad port") }
-	if service.ServiceProtocol != "udp" { t.Errorf("Bad protocol") }
-
-	// No ports, No port - wrong
-	jsnService = "{\"name\":\"example\", \"ports\":[]}"
-	service, err = ServiceFromJson([]byte(jsnService))
-	if err == nil || service != nil { t.Errorf("Expected FAIL on unmarshalling bad JSON") }
+	// Net128
+	rx = regexp.MustCompile("^" + REGEXP_NET_128 + "$")
+	good = []string{"", "/0", "/1", "/12", "/32", "/100", "/128"}
+	bad = []string{"/", "/-", "/129", "/1000"}
+	for _, item := range good {
+		if !rx.MatchString(item) {
+			t.Errorf("Expect as good Net128: %s", item)
+		}
+	}
+	for _, item := range bad {
+		if rx.MatchString(item) {
+			t.Errorf("Expect as bad Net128: %s", item)
+		}
+	}
 }
 
-func TestBadBad(t *testing.T) {
-	//t.Errorf("Ok!")
+// Test bin util.
+func TestCall(t *testing.T) {
+	if !ENABLE_BIN_CALLS {
+		return
+	} // Skip if not allowed
+	// Echo call
+	stdout, err := run(nil, "echo", "42")
+	if err != nil {
+		t.Fail()
+	}
+	if stdout != "42\n" {
+		t.Error("Bad response: `", stdout, "`")
+	}
+
+	// Stdin echo|head test
+	stdin := "123456"
+	stdout, err = run(&stdin, "head", "-c2")
+	if err != nil {
+		t.Fail()
+	}
+	if stdout != "12" {
+		t.Error("Bad response (head): `", stdout, "`")
+	}
+
+	// Error command
+	_, err = run(nil, "exit", "3")
+	if err == nil {
+		t.Error("Expect error")
+	}
 }
 
+func TestCutIPSet(t *testing.T) {
+	table := map[string]string{
+		"test_tcp_2200": "test_tcp_2200",
+		"very_long_service_name_abcd_1234_tcp_2200": "ve_lo_se_na_ab_12_tc_2200",
+	}
+	for i, x := range table {
+		if v := correctIPSetName(i); v != x {
+			t.Error("correctIPSetName: ", i, "->", v, "!=", x)
+		}
+	}
+}
+
+func TestGetRandomString(t *testing.T) {
+	for i := 0; i < 255; i++ {
+		if v := getRandomString(); len(v) != 25 {
+			t.Error("Non-25 string:", v)
+		}
+	}
+}
+
+func TestGetBinary(t *testing.T) {
+	// get default binaries for any *nix
+	testCases := []string{
+		"sh", "cat", "ls",
+	}
+	for _, k := range testCases {
+		if getBinary(k) == "false" {
+			t.Error("can't find binary ", k)
+		}
+	}
+}
+
+func TestIsIPv6(t *testing.T) {
+	if isIPv6("1.2.3.4") {
+		t.Fail()
+	}
+	if !isIPv6("::1:5ee:bad:c0de") {
+		t.Fail()
+	}
+}

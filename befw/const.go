@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2021 Wargaming Group Limited
+ * Copyright 2018-2023 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,16 @@ const (
 	aclDatacenter             = "consul"
 	iptablesStaticSet         = `-I BEFW {PRIORITY} -m set --match-set {NAME} src -j {TARGET}
 `
-	iptablesRulesLine = `
+	iptablesRulesLineMulti = `
 # {NAME}
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -m set --set {NAME} src -j ACCEPT
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -j DROP
+# /{NAME}
+`
+	iptablesRulesLine = `
+# {NAME}
+-A BEFW -p {PROTO} --dport {PORT} -m set --match-set {NAME} src -j ACCEPT
+-A BEFW -p {PROTO} --dport {PORT} -j NFLOG --nflog-group 402
 # /{NAME}
 `
 	iptablesNidsLine = `
@@ -45,19 +51,21 @@ COMMIT
 	packageName   = "befw-firewalld"
 	consulAddress = "127.0.0.1:8500"
 
-	allowIPSetName = "rules_allow"
-	confSetPrefix  = "set."
+	SET_ALLOW     = "rules_allow"
+	SET_DENY      = "rules_deny"
+	V6            = "_v6"
+	confSetPrefix = "set."
 )
 
 var mandatoryIPSet = []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"} // "shoot yourself in the foot"-protection
 var staticIPSetList = []staticIPSetConf{
 	{
-		Name:     allowIPSetName,
+		Name:     SET_ALLOW,
 		Priority: 1,
 		Target:   "ACCEPT",
 	},
 	{
-		Name:     "rules_deny",
+		Name:     SET_DENY,
 		Priority: 2,
 		Target:   "REJECT",
 	},
@@ -74,3 +82,9 @@ const befwStateSocket = "/var/run/befw/api.sock"
 
 const befwStateBin = "/var/run/befw/state.bin"
 const befwNillService = "anyother.service"
+
+// Code behavior constants
+const (
+	ENABLE_BIN_CALLS     = false // Allow to execute external commands in tests (such as 'echo')
+	ENABLE_IPT_MULTIPORT = false // If true - fill templates based on --dports (allows multiple ports per one rule)
+)

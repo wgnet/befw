@@ -1,5 +1,5 @@
 /**
- * Copyright 2018-2021 Wargaming Group Limited
+ * Copyright 2018-2023 Wargaming Group Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,15 @@ package befw
 
 import (
 	"bufio"
-	"fmt"
 	"github.com/wgnet/befw/logging"
-	"encoding/json"
-	"errors"
-	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// Current firewall instance
+var fw firewall = newIPTables() // Can be configured
 
 var OverrideConfig = make(map[string]string)
 
@@ -39,134 +38,18 @@ type config struct {
 	ServicesDir    string
 	IPSetDir       string
 	RulesPath      string
-	WhitelistIPSet []string
+	MandatoryIPSet []string
 	StaticSetList  []staticIPSetConf
 	Timeout        befwConfigTimoutType
 	NIDSEnable     bool
 }
 
-type befwServiceProto string
-type portRange string
 type RefreshMethod int8
-
-
-
-type serviceClient struct {
-	clientCIDR   *net.IPNet
-	clientExpiry int64
-}
-
-type service struct {
-	ServiceName     string           `json:"name"`
-	ServiceMode     string           `json:"mode"`
-	ServiceProtocol befwServiceProto `json:"protocol"`
-	ServicePort     uint16           `json:"port"`
-	ServicePorts    []befwPort           `json:"ports"`
-	serviceClients  []serviceClient
-}
-
-type befwPort struct {
-	Port	  portRange
-	RawPort   json.RawMessage  `json:"port"`
-	PortProto befwServiceProto `json:"protocol"`
-}
 
 type befwConfigTimoutType struct {
 	Consul      time.Duration
 	ConsulWatch time.Duration
 }
-
-func PortsAsStrings(ports []portRange) []string {
-	buf := make([]string, len(ports))
-	for i, _ := range ports {
-		buf[i] = string(ports[i])
-	}
-	return buf
-}
-
-func (self *service) toString() string {
-	s := new(strings.Builder)
-	s.WriteString(fmt.Sprintf("Service '%s'. Ports: ", self.ServiceName))
-	s.WriteString(fmt.Sprintf("%d/%s", self.ServicePort, self.ServiceProtocol))
-	for _, p := range self.ServicePorts {
-		s.WriteString(" ")
-		s.WriteString(p.toString())
-	}
-	return s.String()
-}
-
-func (self *befwPort) toTag() string {
-	return fmt.Sprintf("%s/%s", self.Port, self.PortProto)
-}
-
-func PortFromTag(tag string) (*befwPort, error)  {
-	p := strings.Split(tag, "/")
-	if len(p) != 2 {return nil, errors.New("Expected format: '<port>/<protocol>'.")}
-
-	dport := portRange(p[0])
-	proto := befwServiceProto(strings.ToLower(p[1]))
-
-	if proto != ipprotoTcp && proto != ipprotoUdp {return nil, errors.New("Expected protocol: 'tcp' or 'udp' in '<port>/<protocol>'.")}
-	p = strings.Split(string(dport), ":")
-	if len(p) > 2 {return nil, errors.New("Expected port/s: '<num>' or '<num>:<num>' (num range is 0-65535) in  '<port>/<protocol>'")}
-	for _, portNum := range p {
-		num, err := strconv.Atoi(portNum); 
-		if err != nil {return nil, errors.New("Port is not a number 0-65535")}
-		if num <=0 || num > 65535 {return nil, errors.New("Expected port/s: '<num>' or '<num>:<num>' (num range is 0-65535) in  '<port>/<protocol>'")}
-	}
-	return &befwPort {
-		Port:		dport,
-		RawPort:	nil,
-		PortProto:	proto,
-	}, nil
-}
-
-func (self *befwPort) toString() string {
-	return self.toTag()
-}
-
-func (self *befwPort) Prepare() {
-	raw := string(self.RawPort)
-	raw = strings.Trim(raw, "\"")
-	self.Port = portRange(raw)
-}
-
-func  ServiceFromJson(data []byte) (*service, error) {
-	var v service
-	e := json.Unmarshal(data, &v); 
-	if e != nil { return nil, errors.New("Bad JSON with service.") } 
-
-	var first *befwPort
-	if v.ServicePorts != nil {
-		for i := range v.ServicePorts {
-			v.ServicePorts[i].Prepare()
-			if first == nil { first = &v.ServicePorts[i] }
-			if v.ServicePorts[i].PortProto == "" {
-				v.ServicePorts[i].PortProto = ipprotoTcp
-			}
-		}
-	}
-	if v.ServiceMode == "" {
-		v.ServiceMode = "default"
-	}
-	if v.ServiceProtocol == "" {
-		if first == nil {
-			v.ServiceProtocol = ipprotoTcp
-		} else {
-			v.ServiceProtocol = first.PortProto
-		}
-	}
-	if v.ServicePort == 0 {
-		if first == nil { return nil, errors.New("Expected not empty 'port' or 'ports' fields.") }
-		port := strings.Split(string(first.Port), ":")
-		value, err := strconv.Atoi(port[0])
-		if err != nil { return nil, errors.New("Bad port in ports.") }
-		v.ServicePort = uint16(value)
-	}
-	return &v, nil
-
-}
-
 
 func createConfig(configFile string) *config {
 	ret := &config{
@@ -176,7 +59,7 @@ func createConfig(configFile string) *config {
 		IPSetDir:       staticIpsetPath,
 		ServicesDir:    staticServicesPath,
 		RulesPath:      staticRulesPath,
-		WhitelistIPSet: make([]string, 0),
+		MandatoryIPSet: make([]string, 0),
 		StaticSetList:  staticIPSetList, // default, TODO: make a Config
 		Timeout: befwConfigTimoutType{
 			Consul:      5 * 60 * time.Second,
@@ -219,9 +102,9 @@ func createConfig(configFile string) *config {
 		}
 		n := 3
 		for k, v := range kv {
-			if confSetPrefix+allowIPSetName == k {
+			if confSetPrefix+SET_ALLOW == k {
 				v0 := strings.Split(v, ";")
-				ret.WhitelistIPSet = v0
+				ret.MandatoryIPSet = v0
 				continue
 			}
 			if strings.HasPrefix(k, confSetPrefix) {
