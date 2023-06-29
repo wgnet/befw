@@ -32,7 +32,7 @@ type state struct {
 	nodeName            string
 	nodeDC              string
 	localDC             string
-	NodeServices        []service
+	NodeServices        []bService
 	IPSets              map[string][]string
 	lastUpdated         time.Time
 	Config              *config
@@ -101,7 +101,7 @@ func newState(configFile string) *state {
 			break
 		}
 	}
-	state.NodeServices = make([]service, 0)
+	state.NodeServices = make([]bService, 0)
 	return state
 }
 
@@ -109,27 +109,24 @@ func newState(configFile string) *state {
 
 func (state *state) modifyLocalState() {
 	localServices := state.Config.getLocalServices()
-	keys := make(map[string]*service)
-	for idx, localService := range localServices {
+	keys := make(map[string]*bService)
+	for _, localService := range localServices {
+        var first bPort
+        if len(localService.Ports) > 0 { first = localService.Ports[0] } // TODO: else  ...
 		v := api.AgentServiceRegistration{
-			Name: localService.ServiceName,
-			Port: (int)(localService.ServicePort),
-			Tags: []string{"local", "befw", (string)(localService.ServiceProtocol), localService.ServiceMode},
+			Name: localService.Name,
+			Port: int(first.From),
+			Tags: []string{"local", "befw", (string)(first.Protocol)}, // TODO: localService.ServiceMode
 		}
-		if localService.ServicePorts != nil {
-			for _, p := range localService.ServicePorts {
-				v.Tags = append(v.Tags, p.toTag())
-			}
-		}
+        for _, p := range localService.Ports {
+            v.Tags = append(v.Tags, p.toTag())
+        }
 		if e := state.consulClient.Agent().ServiceRegister(&v); e != nil {
-			logging.LogWarning(fmt.Sprintf("Can't register service %s @ %d/%s: %s",
-				localService.ServiceName,
-				localService.ServicePort,
-				localService.ServiceProtocol, e.Error()))
+			logging.LogWarning(fmt.Sprintf("Can't register service %s: %s",
+				localService.Name, e.Error())) // TODO: Show all ports ?
 		} else {
-			logging.LogInfo(fmt.Sprintf("Updating local service %s @ %d/%s", localService.ServiceName,
-				localService.ServicePort, localService.ServiceProtocol))
-			keys[localService.ServiceName] = &localServices[idx]
+			logging.LogInfo(fmt.Sprintf("Updating local service %s", localService.Name))
+			keys[localService.Name] = &localService
 		}
 	}
 	// now deregister all 'local' services we has not
@@ -139,38 +136,31 @@ func (state *state) modifyLocalState() {
 			if !(l && b) { // non-local service
 				continue
 			}
-			var proto befwServiceProto
+			var prot netProtocol
 			if inArray(consulService.Tags, "udp") {
-				proto = ipprotoUdp
+			    prot = PROTOCOL_UDP
 			} else {
-				proto = ipprotoTcp
+			    prot = PROTOCOL_TCP
 			}
-			if sv, ok := keys[key]; !ok || !(sv.ServicePort == uint16(consulService.Port) && sv.ServiceProtocol == proto) {
+            if sv, ok := keys[key]; !ok || 
+                        len(sv.Ports) <= 0 || 
+                        !(sv.Ports[0].From == uint16(consulService.Port) && sv.Ports[0].Protocol == prot) {
 				// deregister if has not same service
 				if e := state.consulClient.Agent().ServiceDeregister(key); e == nil {
-					logging.LogInfo(fmt.Sprintf("Deregistering non-existing local service %s @ %d/%s", key, consulService.Port, proto))
+					logging.LogInfo(fmt.Sprintf("Deregistering non-existing local service %s", key))
 				} else {
 					logging.LogWarning("Can't deregister local service ", key, ". Error: ", e.Error())
 				}
-			}
+            }
 		}
 	}
 }
 
-func inArray(arr []string, elem string) bool {
-	for _, r := range arr {
-		if r == elem {
-			return true
-		}
-	}
-	return false
-}
-
-func fromTags(tags []string) []befwPort {
-	result := make([]befwPort, 0)
+func fromTags(tags []string) []bPort {
+	result := make([]bPort, 0)
 	for _, tag := range tags {
-		newport, err := PortFromTag(tag)
-		if err != nil {continue}
+		newport, err := NewBPort(tag)
+		if err != nil { continue }
 		result = append(result, *newport)
 	}
 	return result
@@ -178,7 +168,7 @@ func fromTags(tags []string) []befwPort {
 
 func (state *state) generateState() error {
 	state.IPSets = state.Config.getLocalIPSets()
-	state.NodeServices = make([]service, 0)
+	state.NodeServices = make([]bService, 0)
 	// download dynamic from consul
 	// 2 download all services
 	registeredServices, e := state.consulClient.Agent().Services()
@@ -190,19 +180,20 @@ func (state *state) generateState() error {
 		if !isBefw(serviceData.Tags) {
 			continue
 		}
-		newService := service{
-			ServiceName:     serviceName,
-			ServicePort:     uint16(serviceData.Port),
-			ServiceProtocol: getProtocol(serviceData.Tags),
-			ServiceMode:     getMode(serviceData.Tags),
-			serviceClients:  make([]serviceClient, 0),
-			ServicePorts:    fromTags(serviceData.Tags),
+		newService := bService{
+			Name:     serviceName,
+			//ServicePort:     uint16(serviceData.Port),
+			//ServiceProtocol: getProtocol(serviceData.Tags),
+			//ServiceMode:     getMode(serviceData.Tags),
+			Clients:  make([]bClient, 0),
+			Ports:    fromTags(serviceData.Tags),
 		}
 		// XXX: register BEFORE new service Name
-		newService.registerNflog()
+        // TODO: Check for intersections of ports ?
+		newService.nflogRegister()
 		newServiceName := transform(&newService)
 		state.IPSets[newServiceName] = make([]string, 0) // empty? ok!
-		newService.ServiceName = newServiceName
+		newService.Name = newServiceName
 		paths := state.generateKVPaths(newServiceName)
 
 		// create ipset-newServiceName
@@ -220,14 +211,14 @@ func (state *state) generateState() error {
 							logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
 							return e
 						} else {
-							newService.serviceClients = append(newService.serviceClients, alias...)
+							newService.Clients = append(newService.Clients, alias...)
 						}
 					} else {
 						if kvp.Value == nil {
 							continue
 						}
 						if newClient, e := kv2ServiceClient(kvp); e == nil {
-							newService.serviceClients = append(newService.serviceClients, newClient)
+							newService.Clients = append(newService.Clients, newClient)
 						} else {
 							logging.LogWarning("Can't add service client", newServiceName, e.Error())
 						}
@@ -275,11 +266,11 @@ func (state *state) applyState() error {
 
 }
 
-var aliasCache map[string][]serviceClient
+var aliasCache map[string][]bClient
 
 func refresh(configFile string) (retState *state, retError error) {
 	var state *state
-	aliasCache = make(map[string][]serviceClient) // drop old aliases
+	aliasCache = make(map[string][]bClient) // drop old aliases
 	defer func() {
 		if e := recover(); e != nil {
 			logging.LogWarning("[BEFW] Recovering from error: ", e)
@@ -318,7 +309,7 @@ func showState(configFile string) (data map[string][]string, e error) {
 		return
 	}
 	for _, srv := range state.NodeServices {
-		data[srv.ServiceName] = state.IPSets[srv.ServiceName]
+		data[srv.Name] = state.IPSets[srv.Name]
 		data["*NodeName"] = []string{state.nodeName}
 		data["*NodeDC"] = []string{state.nodeDC}
 	}
@@ -334,16 +325,16 @@ func isAlias(pair *api.KVPair, path string) bool {
 	return false
 }
 
-func (state *state) getAlias(pair *api.KVPair, path string) ([]serviceClient, error) {
+func (state *state) getAlias(pair *api.KVPair, path string) ([]bClient, error) {
 	if aliasCache == nil {
-		aliasCache = make(map[string][]serviceClient)
+		aliasCache = make(map[string][]bClient)
 	}
 	aliasName := strings.Replace(pair.Key, path, "", 1)
 	if v, ok := aliasCache[aliasName]; ok {
 		return v, nil
 	}
 	path = fmt.Sprintf("befw/$alias$/%s/", aliasName)
-	res := make([]serviceClient, 0)
+	res := make([]bClient, 0)
 	if kvs, e := state.consulKVList(path); e != nil {
 		return nil, e
 	} else {
@@ -359,9 +350,9 @@ func (state *state) getAlias(pair *api.KVPair, path string) ([]serviceClient, er
 		return res, nil
 	}
 }
-func kv2ServiceClient(pair *api.KVPair) (serviceClient, error) {
+func kv2ServiceClient(pair *api.KVPair) (bClient, error) {
 	var expiryTime int64
-	result := serviceClient{}
+	result := bClient{}
 	client := path2ipnet(pair.Key)
 	if client == nil {
 		return result, errors.New("Bad CIDR: " + pair.Key)
@@ -445,7 +436,7 @@ func (state *state) getStaticIPSets() error {
 	return nil
 }
 
-func (this *serviceClient) appendToIpsetIf(ipsets *map[string][]string, ipset string) {
+func (this *bClient) appendToIpsetIf(ipsets *map[string][]string, ipset string) {
 	if !this.isExpired() {
 		if (*ipsets)[ipset] == nil {
 			(*ipsets)[ipset] = make([]string, 0)
@@ -453,7 +444,7 @@ func (this *serviceClient) appendToIpsetIf(ipsets *map[string][]string, ipset st
 		(*ipsets)[ipset] = append((*ipsets)[ipset], this.clientCIDR.String())
 	}
 }
-func (this *serviceClient) isExpired() bool {
+func (this *bClient) isExpired() bool {
 	epoch := time.Now().Unix()
 	if this.clientExpiry < 0 || this.clientExpiry > epoch {
 		return false
@@ -463,14 +454,14 @@ func (this *serviceClient) isExpired() bool {
 
 func (state *state) generateIPSets() {
 	for _, localService := range state.NodeServices {
-		for _, c := range localService.serviceClients {
-			c.appendToIpsetIf(&state.IPSets, localService.ServiceName)
+		for _, c := range localService.Clients {
+			c.appendToIpsetIf(&state.IPSets, localService.Name)
 		}
 	}
 }
 
-func transform(srv *service) string {
-	serviceName := srv.ServiceName
+func transform(srv *bService) string {
+	serviceName := srv.Name
 	// 1. lower
 	serviceName = strings.ToLower(serviceName)
 	// 2. remove all non-FQDN symbols
@@ -486,11 +477,17 @@ func transform(srv *service) string {
 			tmp.WriteByte(v)
 		}
 	}
-	// 3. add protocol_port_ to the end
+	// 3. add protocol_port_ to the end from first port
+    // TODO: Skip port protocol in service name?
+    if len(srv.Ports) <= 0 { 
+        tmp.WriteString("_nil_nil")
+        return tmp.String()
+    }
+    first := srv.Ports[0]
 	tmp.WriteByte('_')
-	tmp.WriteString(string(srv.ServiceProtocol))
+	tmp.WriteString(first.Protocol)
 	tmp.WriteByte('_')
-	tmp.WriteString(strconv.Itoa(int(srv.ServicePort)))
+	tmp.WriteString(fmt.Sprint(first.From))
 	return tmp.String()
 }
 

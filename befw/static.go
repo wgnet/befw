@@ -23,7 +23,6 @@ import (
 	"path"
 	"regexp"
 	"strings"
-	"strconv"
 )
 
 var BEFWRegexp = regexp.MustCompile("^befw/\\S+/(?:[\\d\\.]{7,15}(?:/\\d{1,2})?|\\$\\S+\\$)$")
@@ -99,12 +98,13 @@ func path2ipnet(path string) (r *net.IPNet) {
 	}
 }
 
-func (this *config) getLocalServices() []service {
-	result := make([]service, 0)
-	uniqPorts := map[befwServiceProto]map[portRange]bool {
-		ipprotoTcp: make(map[portRange]bool),
-		ipprotoUdp: make(map[portRange]bool),
+func (this *config) getLocalServices() []bService {
+	result := make([]bService, 0)
+	uniqPorts := map[netProtocol][]bPort {
+		PROTOCOL_TCP: make([]bPort, 10, 10),
+		PROTOCOL_UDP: make([]bPort, 10, 10),
 	}
+    // 1. Scan directory
 	if files, e := ioutil.ReadDir(this.ServicesDir); e == nil {
 	serviceLoop:
 		for _, file := range files {
@@ -113,34 +113,31 @@ func (this *config) getLocalServices() []service {
 			}
 			name := path.Join(this.ServicesDir, file.Name())
 			if data, e := ioutil.ReadFile(name); e == nil {
-				v, err := ServiceFromJson(data)
+
+                // 2. Parse service JSON
+				srv, err := ServiceFromJson(data)
 				if err != nil {
 					logging.LogWarning("Bad service file", file.Name(),  err)
 					continue
 				}
+				logging.LogDebug("New service:", srv.toString())
 
-				logging.LogDebug("New service:", v.toString())
-				if uniqPorts[v.ServiceProtocol] == nil {
-					uniqPorts[v.ServiceProtocol] = make(map[portRange]bool)
-				}
-				if uniqPorts[v.ServiceProtocol][portRange(strconv.Itoa(int(v.ServicePort)))] {
-					logging.LogWarning("Service ", v.ServiceName, " has overlapping port: ", v.ServicePort, "/", v.ServiceProtocol)
-					continue serviceLoop
-				}
-				uniqPorts[v.ServiceProtocol][portRange(strconv.Itoa(int(v.ServicePort)))] = true
-				if v.ServicePorts != nil {
-					for i := range v.ServicePorts {
-						if uniqPorts[v.ServicePorts[i].PortProto] == nil {
-							uniqPorts[v.ServicePorts[i].PortProto] = make(map[portRange]bool)
-						}
-						if uniqPorts[v.ServicePorts[i].PortProto][v.ServicePorts[i].Port] {
-							logging.LogWarning("Service ", v.ServiceName, " has overlapping port: ", v.ServicePorts[i].Port, "/", v.ServicePorts[i].PortProto)
-							continue serviceLoop
-						}
-						uniqPorts[v.ServicePorts[i].PortProto][v.ServicePorts[i].Port] = true
-					}
-				}
-				result = append(result, *v)
+                // 3. Check overlapping ports (warning only)
+                for _, port := range srv.Ports {
+                    var uniq []bPort = uniqPorts[port.Protocol] // TODO Check if protocol in cache? Possible failure
+                    for _, exist := range uniq { 
+                        if exist.IsIntersect(&port) {  
+                            // Only warning. Overlapping port reservation should not block service registration
+                            //    Is it OK?
+                            logging.LogWarning("Service ", srv.Name, " has overlapping port: ", port.toTag() )
+                            // continue serviceLoop     
+                        } 
+                    }
+                    uniq = append(uniq, port)
+                }
+
+                // 4. Append service
+				result = append(result, *srv)
 			}
 		}
 	}

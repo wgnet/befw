@@ -25,7 +25,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -33,83 +32,82 @@ import (
 )
 
 type serviceUnknownClient struct {
-	service *service
+	service *bService
 	clients map[string]int
 }
 
-var serviceClients = make(map[string]*serviceUnknownClient)
-var tcpServiceLinks = make(map[portRange]*serviceUnknownClient)
-var udpServiceLinks = make(map[portRange]*serviceUnknownClient)
-var serviceClientsLock = new(sync.RWMutex)
+var allServiceClients = make(map[string]*serviceUnknownClient)
+var serviceByTCP = make(map[netPort]*serviceUnknownClient)
+var serviceByUDP = make(map[netPort]*serviceUnknownClient)
+
+var serviceClientsLock = new(sync.RWMutex) // TODO rename LOCK_serviceClients
 
 var serviceNil = &serviceUnknownClient{
 	service: nil,
 	clients: make(map[string]int),
 }
 
-func (this *service) registerNflog() {
+func (this *bService) nflogRegister() {
 	serviceClientsLock.Lock()
 	defer serviceClientsLock.Unlock()
-	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s @ %d/%s", this.ServiceName, this.ServicePort, this.ServiceProtocol))
-	if _, ok := serviceClients[this.ServiceName]; ok {
+    // TODO: Log all service ports ?
+	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s ", this.Name))
+	if _, ok := allServiceClients[this.Name]; ok {
 		return
 	}
-	serviceClients[this.ServiceName] = &serviceUnknownClient{
+	allServiceClients[this.Name] = &serviceUnknownClient{
 		service: this,
 		clients: make(map[string]int),
 	}
-	defport := portRange(strconv.Itoa(int(this.ServicePort)))
-	if this.ServiceProtocol == ipprotoTcp {
-		tcpServiceLinks[defport] = serviceClients[this.ServiceName]
-	} else {
-		udpServiceLinks[defport] = serviceClients[this.ServiceName]
-	}
-	for _, k := range this.ServicePorts {
-		if k.PortProto == ipprotoTcp {
-			tcpServiceLinks[k.Port] = serviceClients[this.ServiceName]
-		} else {
-			udpServiceLinks[k.Port] = serviceClients[this.ServiceName]
-		}
-	}
 }
 
-func findServiceByPort(port uint16, protocol befwServiceProto) *serviceUnknownClient {
-	dport := portRange(strconv.Itoa(int(port)))
-	serviceClientsLock.RLock()
-	defer serviceClientsLock.RUnlock()
-	if protocol == ipprotoTcp {
-		if _, ok := tcpServiceLinks[dport]; ok {
-			return tcpServiceLinks[dport]
-		}
-	} else {
-		if _, ok := udpServiceLinks[dport]; ok {
-			return udpServiceLinks[dport]
-		}
-	}
-	return serviceNil
+func findServiceByPort(port netPort, protocol netProtocol) *serviceUnknownClient {
+    var lookup map[netPort]*serviceUnknownClient
+    if protocol == PROTOCOL_TCP {
+        lookup = serviceByTCP
+    } else if protocol == PROTOCOL_UDP {
+        lookup = serviceByUDP
+    } else { return serviceNil }
+
+    if _, ok := lookup[port]; ok { return lookup[port] } 
+
+    var result *serviceUnknownClient = serviceNil
+    lookupPort, err := NewBPort(fmt.Sprintf("%d/%s", port, protocol))
+    if err != nil { /* Unexpected */ return result }
+    FindPortLoop: 
+        for _, srv := range allServiceClients {
+            for _, srvPort := range srv.service.Ports {
+                if srvPort.IsIntersect(lookupPort) {
+                    result = srv
+                    break FindPortLoop
+                }
+            }
+        }
+    lookup[port] = result
+    return result
 }
 
 func nflogCallback(payload *nflog.Payload) int {
 	packet := gopacket.NewPacket(payload.Data, layers.LayerTypeIPv4, gopacket.Default)
-	var protocol befwServiceProto
-	var port uint16 = 0
+	var protocol netProtocol
+	var port netPort = 0
 	var src net.IP
 	if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
 		ip, _ := ipLayer.(*layers.IPv4)
 		src = ip.SrcIP
 	}
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-		protocol = ipprotoTcp
+		protocol = PROTOCOL_TCP
 		tcp, _ := tcpLayer.(*layers.TCP)
-		port = uint16(tcp.DstPort)
+		port = netPort(tcp.DstPort)
 		if tcp.SYN && !tcp.ACK { // synscan only
 			nidsNFCallback(int(port), src)
 		}
 	}
 	if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
-		protocol = ipprotoUdp
+		protocol = PROTOCOL_UDP
 		udp, _ := udpLayer.(*layers.UDP)
-		port = uint16(udp.DstPort)
+		port = netPort(udp.DstPort)
 	}
 	if port > 0 {
 		srv := findServiceByPort(port, protocol)
@@ -152,27 +150,23 @@ func StartNFLogger() {
 	}()
 }
 
-func serviceHeader(svc *service) string {
+func serviceHeader(srv *bService) string {
 	sb := strings.Builder{}
 	sb.WriteString("Service: ")
-	sb.WriteString(svc.ServiceName)
+	sb.WriteString(srv.Name)
 	sb.WriteString("\nPorts: ")
-	sb.WriteString(strconv.Itoa(int(svc.ServicePort)))
-	sb.WriteByte('/')
-	sb.WriteString(string(svc.ServiceProtocol))
-	for _, k := range svc.ServicePorts {
-		sb.WriteString(", ")
-		sb.WriteString(string(k.Port))
-		sb.WriteByte('/')
-		sb.WriteString(string(k.PortProto))
-	}
+    for i, port := range srv.Ports {
+        if i > 0 { sb.WriteString(", ") }
+        sb.WriteString(port.toTag())
+    }
 	return sb.String()
 }
+
 func syncData() { // client function
 	serviceClientsLock.RLock()
 	defer serviceClientsLock.RUnlock()
 	os.MkdirAll(befwState, 0755)
-	for name, svc := range serviceClients {
+	for name, svc := range allServiceClients {
 		filename := path.Join(befwState, name)
 		os.Remove(filename)
 		if fd, e := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644); e == nil {
@@ -210,7 +204,7 @@ func syncData() { // client function
 func cleanupMissing() {
 	serviceClientsLock.Lock()
 	defer serviceClientsLock.Unlock()
-	for _, v := range serviceClients {
+	for _, v := range allServiceClients {
 		for i := range v.clients {
 			delete(v.clients, i)
 		}

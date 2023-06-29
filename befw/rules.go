@@ -22,10 +22,7 @@ import (
 	"fmt"
 	"github.com/wgnet/befw/logging"
 	"io/ioutil"
-	"math/rand"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,92 +91,51 @@ func (state *state) generateRules() string {
 				"{NAME}", set.Name, "{PRIORITY}", strconv.Itoa(set.Priority), "{TARGET}", set.Target).WriteString(result, rules.Static)
 		}
 	}
-	for _, serv := range state.NodeServices {
-		if state.IPSets[serv.ServiceName] == nil {
+	for _, srv := range state.NodeServices {
+		if state.IPSets[srv.Name] == nil {
 			continue
 		}
 
-		name := cutIPSet(serv.ServiceName)
-		ports := fetchServicePorts(serv, rules.Line)
+		name := cutIPSet(srv.Name)
+		ports := templateFwPorts(srv, rules.Line)
 
 		// Write rule lines
+        var enforcing bool = false
+        var templateRule string = rules.Line
+        if enforcing { templateRule = rules.LineE }
 		for _, line := range ports {
-			if serv.ServiceMode != "enforcing" {
-				strings.NewReplacer(
-					"{NAME}", name,
-					"{PORT}", line.Port,
-					"{PORTS}", line.Port,
-					"{PROTO}", line.Proto,
-				).WriteString(result, rules.Line)
-			} else {
-				strings.NewReplacer(
-					"{NAME}", name,
-					"{PORT}", line.Port,
-					"{PORTS}", line.Port,
-					"{PROTO}", line.Proto,
-				).WriteString(result, rules.LineE)
-			}
-		}
+            strings.NewReplacer(
+                "{NAME}", name,
+                "{PORT}", line.Port,
+                "{PORTS}", line.Port,
+                "{PROTO}", line.Proto,
+            ).WriteString(result, templateRule)
+        }
 	}
 	replacer1.WriteString(result, rules.Footer)
 	return result.String()
 }
 
-func fetchServicePorts(serv service, template string) []IptablesPort {
-	// Group ports by protocol:
-	portsByProto := make(map[befwServiceProto][]portRange)
-	portsByProto[serv.ServiceProtocol] = append(
-		portsByProto[serv.ServiceProtocol],
-		portRange(strconv.Itoa(int(serv.ServicePort))))
-	if serv.ServicePorts != nil {
-		for _, port := range serv.ServicePorts {
-			proto := port.PortProto
-			portsByProto[proto] = append(portsByProto[proto], port.Port)
-		}
-	}
-
-	// Generate IptablesPort items:
+func templateFwPorts(srv bService, template string) []IptablesPort {
 	var lines []IptablesPort
-	for proto, ports := range portsByProto {
-		if strings.Contains(template, "{PORTS}") {
-			// multiport rules
-			lines = append(lines, IptablesPort{
-				Port:  strings.Join(PortsAsStrings(ports), ","),
-				Proto: string(proto),
-			})
-		} else {
-			// legacy rules support
-			for _, port := range ports {
-				lines = append(lines, IptablesPort{
-					Port:  string(port),
-					Proto: string(proto),
-				})
-			}
-		}
-	}
-	return lines
+    var portRanges map[netProtocol][]string = map[netProtocol][]string{
+        PROTOCOL_TCP: make([]string, 5),
+        PROTOCOL_UDP: make([]string, 5),
+    }
+    for _, port := range srv.Ports {
+        portRanges[port.Protocol] = append(portRanges[port.Protocol], port.Range())
+    }
+    for prot, portRange := range portRanges {
+        if len(portRange) > 0 {
+            lines = append(lines, IptablesPort{
+                Port:  strings.Join(portRange, ", "),
+                Proto: prot,
+            })
+        }
+    }
+    return lines
 }
 
-func getBinary(name string) string {
-	// use pre-built path with right order
-	path := []string{
-		"/sbin",
-		"/usr/sbin",
-		"/bin",
-		"/usr/bin",
-		"/usr/local/sbin",
-		"/usr/local/bin",
-	}
-	for _, p := range path {
-		v := filepath.Join(p, name)
-		if i, e := os.Stat(v); e == nil {
-			if i.Mode()&0111 != 0 {
-				return v
-			}
-		}
-	}
-	return "false" // command
-}
 
 func applyRules(rules string) error {
 	stdout := new(strings.Builder)
@@ -204,43 +160,6 @@ func applyRules(rules string) error {
 }
 
 var randDict []byte
-
-func getRandomString() string {
-	// random of 30
-	if randDict == nil {
-		randDict = make([]byte, 26*2+10)
-		for i := 'A'; i <= 'Z'; i++ {
-			randDict[i-'A'] = byte(i)
-		}
-		for i := 'a'; i <= 'z'; i++ {
-			randDict[26+i-'a'] = byte(i)
-		}
-		for i := '0'; i <= '9'; i++ {
-			randDict[52+i-'0'] = byte(i)
-		}
-	}
-	v := make([]byte, 25)
-	for i := 0; i < 25; i++ {
-		v[i] = randDict[rand.Intn(len(randDict)-1)]
-	}
-	return string(v)
-}
-
-func cutIPSet(ipsetName string) string {
-	if len(ipsetName) > 31 { // max size of links
-		parts := strings.Split(ipsetName, "_")
-		leftLength := 31 - len(parts[len(parts)-1]) // we can't reduce last part
-		maxPartLen := int(leftLength/(len(parts)-1) - 1)
-		for i := 0; i < len(parts)-1; i++ {
-			if len(parts[i]) > maxPartLen {
-				parts[i] = string([]byte(parts[i])[0:maxPartLen]) // trim to size
-			}
-		}
-		return strings.Join(parts, "_")
-	} else {
-		return ipsetName
-	}
-}
 
 func applyIPSet(ipsetName string, cidrList []string) (bool, error) {
 	ipset := new(strings.Builder)
