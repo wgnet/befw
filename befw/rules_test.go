@@ -23,8 +23,8 @@ func TestCutIPSet(t *testing.T) {
 		"very_long_service_name_abcd_1234_tcp_2200": "ve_lo_se_na_ab_12_tc_2200",
 	}
 	for i, x := range table {
-		if v := cutIPSet(i); v != x {
-			t.Error("cutIPSet: ", i, "->", v, "!=", x)
+		if v := correctIPSetName(i); v != x {
+			t.Error("correctIPSetName: ", i, "->", v, "!=", x)
 		}
 	}
 }

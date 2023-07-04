@@ -22,6 +22,8 @@ import (
 	"math/rand"
 )
 
+var randDict []byte
+
 func getBinary(name string) string {
 	// use pre-built path with right order
 	path := []string{
@@ -76,7 +78,7 @@ func inArray(arr []string, elem string) bool {
 
 
 // Cut string to be ipset name
-func cutIPSet(ipsetName string) string {
+func correctIPSetName(ipsetName string) string {
 	if len(ipsetName) > 31 { // max size of links
 		parts := strings.Split(ipsetName, "_")
 		leftLength := 31 - len(parts[len(parts)-1]) // we can't reduce last part

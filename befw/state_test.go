@@ -17,10 +17,6 @@ package befw
 
 import "testing"
 
-func TestState(t *testing.T) {
-
-}
-
 func TestGenerateKVPaths(t *testing.T) {
 	s1 := &state{
 		nodeDC:   "ed",
@@ -42,13 +38,13 @@ func TestGenerateKVPaths(t *testing.T) {
 
 func TestWhitelistConst(t *testing.T) {
 	s := &state{}
-	s.applyWhitelistIPSet()
-	if s.IPSets == nil {
-		t.Error("state.IPSets is nil")
+	s.fillMandatoryIPSet()
+	if s.StaticIPSets == nil {
+		t.Error("state.StaticIPSets is nil")
 	}
 	isLocalhost := false
 	is10Net := false
-	if v, ok := s.IPSets[allowIPSetName]; ok {
+	if v, ok := s.StaticIPSets[allowIPSetName]; ok {
 		for _, set := range v {
 			switch set {
 			case "10.0.0.0/8":
@@ -58,9 +54,9 @@ func TestWhitelistConst(t *testing.T) {
 			}
 		}
 	} else {
-		t.Error("state.IPSets[ allowIPSetName ] is not exists")
+		t.Error("state.StaticIPSets[ allowIPSetName ] is not exists")
 	}
 	if !is10Net || !isLocalhost {
-		t.Error("state.IPSets[ allowIPSetName ] must contain 10.0.0.0/8 and 192.168.0.0/16")
+		t.Error("state.StaticIPSets[ allowIPSetName ] must contain 10.0.0.0/8 and 192.168.0.0/16")
 	}
 }

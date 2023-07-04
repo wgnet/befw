@@ -21,13 +21,6 @@ import(
     "strings"
 )
 
-/* // TODO: Temporary Test
-type staticIPSetConf struct {
-	Name     string
-	Priority int
-	Target   string
-} // */
-
 func TestUnmarshalJsonLegacy(t *testing.T) {
 	// Basic json
 	jsnService := "{\"name\":\"example\", \"protocol\":\"tcp\", \"port\":12345}"

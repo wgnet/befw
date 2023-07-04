@@ -29,10 +29,11 @@ func TestPort(t *testing.T) {
         if e != nil { t.Errorf("Unexpected error for %s: %s", raw, e.Error()); continue }
         tag := p.toTag()
         if !strings.EqualFold(tag, raw) && !strings.EqualFold(tag, raw + "/tcp") {
-            t.Errorf("Not equal tag: %s, but expected %s ", p.toTag(), raw) 
+            t.Errorf("Not equal tag: %s, but expected %s ", p.toTag(), raw)
         }
     }
 }
+
 func TestBadPort(t *testing.T) {
     var bad []string = []string{"0", "-123:234", "10/xcp", "10:65536/udp", "-12/udp", "65537/TcP"}
     for _, raw := range bad {
@@ -66,5 +67,34 @@ func TestIntersectPorts(t *testing.T) {
         pB, _ := NewBPort(i.b)
         if pA.IsIntersect(pB) { t.Errorf("Expect NOT intersected: %s - %s", pA.toTag(), pB.toTag());continue}
         if pB.IsIntersect(pA) { t.Errorf("Expect NOT intersected: %s - %s", pB.toTag(), pA.toTag());continue}
+    }
+}
+
+func TestLegacyConversion(t *testing.T) {
+    portA, e := PortFromTag("33:44/tcp")
+    if e != nil { t.Fail() }
+    portB, e := PortFromTag("42/tcp")
+    if e != nil { t.Fail() }
+    legacy := legacyService {
+        ServiceName:        "MyName",
+        ServiceMode:        "enforcing",
+        ServicePort:        123,
+        ServiceProtocol:    befwServiceProto("udp"),
+        ServicePorts:       []legacyBefwPort{ *portA, *portB },
+    }
+    srv, e := legacy.toBService()
+    if e != nil { t.Error("Failed to convert to bService", e.Error()) }
+
+    // Check
+    const bad = "Bad conversion:"
+    if srv.Mode != MODE_ENFORCING { t.Error(bad, "Wrong mode", srv.Mode.asTag(), "expect", legacy.ServiceMode) }
+    if srv.Name != legacy.ServiceName { t.Error(bad, "Wrong name", legacy.ServiceName, "->", srv.Name) }
+    expects := []string {"123/udp", "33:44/tcp", "42/tcp"}
+    for _, expect := range expects {
+        ok := false
+        for _, p := range srv.Ports {
+            if p.toTag() == expect { ok = true; break }
+        }
+        if !ok { t.Error(bad, "Can't find port", expect, "in", srv.Ports) }
     }
 }

@@ -57,7 +57,7 @@ func createConfig(configFile string) *config {
 		ServicesDir:    staticServicesPath,
 		RulesPath:      staticRulesPath,
 		WhitelistIPSet: make([]string, 0),
-		StaticSetList:  staticIPSetList, // default, TODO: make a Config
+		StaticSetList:  staticIPSetList,
 		Timeout: befwConfigTimoutType{
 			Consul:      5 * 60 * time.Second,
 			ConsulWatch: 10 * 60 * time.Second,

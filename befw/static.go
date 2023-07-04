@@ -124,14 +124,14 @@ func (this *config) getLocalServices() []bService {
 
                 // 3. Check overlapping ports (warning only)
                 for _, port := range srv.Ports {
-                    var uniq []bPort = uniqPorts[port.Protocol] // TODO Check if protocol in cache? Possible failure
-                    for _, exist := range uniq { 
-                        if exist.IsIntersect(&port) {  
+                    if _, ok := uniqPorts[port.Protocol]; !ok { continue }
+                    var uniq []bPort = uniqPorts[port.Protocol]
+                    for _, exist := range uniq {
+                        if exist.IsIntersect(&port) {
                             // Only warning. Overlapping port reservation should not block service registration
-                            //    Is it OK?
                             logging.LogWarning("Service ", srv.Name, " has overlapping port: ", port.toTag() )
-                            // continue serviceLoop     
-                        } 
+                            // continue serviceLoop
+                        }
                     }
                     uniq = append(uniq, port)
                 }

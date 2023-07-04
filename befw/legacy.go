@@ -25,13 +25,13 @@ import (
 type befwServiceProto string    // DEPRECATED
 type portRange string           // DEPRECATED
 
-// DEPRECATED. Use bService instead
+// DEPRECATED. Use bService instead.
 type legacyService struct {
 	ServiceName     string           `json:"name"`
 	ServiceMode     string           `json:"mode"`
 	ServiceProtocol befwServiceProto `json:"protocol"`  // DEPRECATED
 	ServicePort     uint16           `json:"port"`      // DEPRECATED
-	ServicePorts    []legacyBefwPort       
+	ServicePorts    []legacyBefwPort
 	RawServicePorts []interface{}    `json:"ports"`
 	serviceClients  []bClient
 }
@@ -64,7 +64,7 @@ func PortFromTag(tag string) (*legacyBefwPort, error)  {
 	p = strings.Split(string(dport), ":")
 	if len(p) > 2 {return nil, fmt.Errorf("Expected port/s: '<num>' or '<num>:<num>' (num range is 0-65535) in  '<port>/<protocol>'")}
 	for _, portNum := range p {
-		num, err := strconv.Atoi(portNum); 
+		num, err := strconv.Atoi(portNum);
 		if err != nil {return nil, fmt.Errorf("Port is not a number 0-65535")}
 		if num <=0 || num > 65535 {return nil, fmt.Errorf("Expected port/s: '<num>' or '<num>:<num>' (num range is 0-65535) in  '<port>/<protocol>'")}
 	}
@@ -75,18 +75,31 @@ func PortFromTag(tag string) (*legacyBefwPort, error)  {
 	}, nil
 }
 
+// Generate bService from JSON
 func  ServiceFromJson(data []byte) (*bService, error) {
     srv, err := LegacyServiceFromJson(data)
     if err != nil { return nil, err }
+    return srv.toBService()
+}
+
+// Convert legacyService to bService
+func (s legacyService) toBService() (*bService, error) {
     var ports []bPort
-    for _, port := range srv.ServicePorts {
+    // Defaul port (JSON: `{... port: 123, protocol: "tcp" ...}`)
+    defaultPort, err := NewBPort(fmt.Sprintf("%d/%s", s.ServicePort, s.ServiceProtocol))
+    if err != nil { return nil, err }
+    ports = append(ports, *defaultPort)
+    // Multiports (JSON: `{... ports: ["123:456/udp", {port: 1, protocol: "tcp"}] ...}`)
+    for _, port := range s.ServicePorts {
         bp, err := NewBPort(port.toTag())
         if err != nil { return nil, err }
         ports = append(ports, *bp)
     }
+
     result := &bService {
-        Name:   srv.ServiceName,
+        Name:   s.ServiceName,
         Ports:  ports,
+        Mode:   getModeFromTags( []string{ s.ServiceMode } ),
     }
     return result, nil
 }
@@ -94,8 +107,8 @@ func  ServiceFromJson(data []byte) (*bService, error) {
 // DEPRECATED
 func  LegacyServiceFromJson(data []byte) (*legacyService, error) {
 	var v legacyService
-	e := json.Unmarshal(data, &v); 
-	if e != nil { return nil, fmt.Errorf("Bad JSON with service.") } 
+	e := json.Unmarshal(data, &v);
+	if e != nil { return nil, fmt.Errorf("Bad JSON with service.") }
 
 	var first *legacyBefwPort
 	if v.RawServicePorts != nil {

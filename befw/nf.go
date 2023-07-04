@@ -40,7 +40,7 @@ var allServiceClients = make(map[string]*serviceUnknownClient)
 var serviceByTCP = make(map[netPort]*serviceUnknownClient)
 var serviceByUDP = make(map[netPort]*serviceUnknownClient)
 
-var serviceClientsLock = new(sync.RWMutex) // TODO rename LOCK_serviceClients
+var lockServiceClients = new(sync.RWMutex)
 
 var serviceNil = &serviceUnknownClient{
 	service: nil,
@@ -48,10 +48,10 @@ var serviceNil = &serviceUnknownClient{
 }
 
 func (this *bService) nflogRegister() {
-	serviceClientsLock.Lock()
-	defer serviceClientsLock.Unlock()
-    // TODO: Log all service ports ?
-	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s ", this.Name))
+	lockServiceClients.Lock()
+	defer lockServiceClients.Unlock()
+	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s (%s)", this.Name,
+                                                                     toTags(this.Ports)))
 	if _, ok := allServiceClients[this.Name]; ok {
 		return
 	}
@@ -69,12 +69,12 @@ func findServiceByPort(port netPort, protocol netProtocol) *serviceUnknownClient
         lookup = serviceByUDP
     } else { return serviceNil }
 
-    if _, ok := lookup[port]; ok { return lookup[port] } 
+    if _, ok := lookup[port]; ok { return lookup[port] }
 
     var result *serviceUnknownClient = serviceNil
     lookupPort, err := NewBPort(fmt.Sprintf("%d/%s", port, protocol))
     if err != nil { /* Unexpected */ return result }
-    FindPortLoop: 
+    FindPortLoop:
         for _, srv := range allServiceClients {
             for _, srvPort := range srv.service.Ports {
                 if srvPort.IsIntersect(lookupPort) {
@@ -163,8 +163,8 @@ func serviceHeader(srv *bService) string {
 }
 
 func syncData() { // client function
-	serviceClientsLock.RLock()
-	defer serviceClientsLock.RUnlock()
+	lockServiceClients.RLock()
+	defer lockServiceClients.RUnlock()
 	os.MkdirAll(befwState, 0755)
 	for name, svc := range allServiceClients {
 		filename := path.Join(befwState, name)
@@ -202,8 +202,8 @@ func syncData() { // client function
 }
 
 func cleanupMissing() {
-	serviceClientsLock.Lock()
-	defer serviceClientsLock.Unlock()
+	lockServiceClients.Lock()
+	defer lockServiceClients.Unlock()
 	for _, v := range allServiceClients {
 		for i := range v.clients {
 			delete(v.clients, i)

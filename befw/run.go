@@ -73,7 +73,7 @@ func StartService(configFile string) {
 func startChecker() {
 	go func() {
 		for {
-			checkIsConsistent()
+            fw.KeepConsistent()
 			time.Sleep(3 * time.Second)
 		}
 	}()
@@ -88,7 +88,6 @@ func GenerateConfigs() string {
 }
 
 func ShowState(configFile string) string {
-
 	rules, err := showState(configFile)
 	if err != nil {
 		return fmt.Sprint("ERROR: Can't generate data", err.Error())
@@ -109,6 +108,5 @@ func ShowState(configFile string) string {
 		}
 		fmt.Fprintf(buf, "\n\n")
 	}
-
 	return buf.String()
 }

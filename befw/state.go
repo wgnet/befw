@@ -33,7 +33,7 @@ type state struct {
 	nodeDC              string
 	localDC             string
 	NodeServices        []bService
-	IPSets              map[string][]string
+	StaticIPSets        map[string][]string
 	lastUpdated         time.Time
 	Config              *config
 }
@@ -52,7 +52,6 @@ type staticIPSetConf struct {
 func newState(configFile string) *state {
 	var e error
 	cfg := createConfig(configFile)
-	cfg.createStaticIPSets() // before any
 	state := new(state)
 	state.Config = cfg
 
@@ -112,18 +111,21 @@ func (state *state) modifyLocalState() {
 	keys := make(map[string]*bService)
 	for _, localService := range localServices {
         var first bPort
-        if len(localService.Ports) > 0 { first = localService.Ports[0] } // TODO: else  ...
+        if len(localService.Ports) <= 0 {
+			logging.LogWarning(fmt.Sprintf("Skip service %s: no ports", localService.Name))
+            continue
+        }
 		v := api.AgentServiceRegistration{
 			Name: localService.Name,
 			Port: int(first.From),
-			Tags: []string{"local", "befw", (string)(first.Protocol)}, // TODO: localService.ServiceMode
+			Tags: []string{"local", "befw", (string)(first.Protocol), localService.Mode.asTag()},
 		}
         for _, p := range localService.Ports {
             v.Tags = append(v.Tags, p.toTag())
         }
 		if e := state.consulClient.Agent().ServiceRegister(&v); e != nil {
 			logging.LogWarning(fmt.Sprintf("Can't register service %s: %s",
-				localService.Name, e.Error())) // TODO: Show all ports ?
+				localService.Name, e.Error()))
 		} else {
 			logging.LogInfo(fmt.Sprintf("Updating local service %s", localService.Name))
 			keys[localService.Name] = &localService
@@ -142,8 +144,8 @@ func (state *state) modifyLocalState() {
 			} else {
 			    prot = PROTOCOL_TCP
 			}
-            if sv, ok := keys[key]; !ok || 
-                        len(sv.Ports) <= 0 || 
+            if sv, ok := keys[key]; !ok ||
+                        len(sv.Ports) <= 0 ||
                         !(sv.Ports[0].From == uint16(consulService.Port) && sv.Ports[0].Protocol == prot) {
 				// deregister if has not same service
 				if e := state.consulClient.Agent().ServiceDeregister(key); e == nil {
@@ -156,9 +158,12 @@ func (state *state) modifyLocalState() {
 	}
 }
 
-func fromTags(tags []string) []bPort {
+func fromTags(portNum uint16, tags []string) []bPort {
+    first := bPort { From: portNum, To: portNum, Protocol: PROTOCOL_TCP }
 	result := make([]bPort, 0)
+    result = append(result, first)
 	for _, tag := range tags {
+        if tag == PROTOCOL_UDP { first.Protocol = PROTOCOL_UDP; continue }
 		newport, err := NewBPort(tag)
 		if err != nil { continue }
 		result = append(result, *newport)
@@ -167,7 +172,7 @@ func fromTags(tags []string) []bPort {
 }
 
 func (state *state) generateState() error {
-	state.IPSets = state.Config.getLocalIPSets()
+	state.StaticIPSets = state.Config.getLocalIPSets()
 	state.NodeServices = make([]bService, 0)
 	// download dynamic from consul
 	// 2 download all services
@@ -182,17 +187,14 @@ func (state *state) generateState() error {
 		}
 		newService := bService{
 			Name:     serviceName,
-			//ServicePort:     uint16(serviceData.Port),
-			//ServiceProtocol: getProtocol(serviceData.Tags),
-			//ServiceMode:     getMode(serviceData.Tags),
+            Mode:     getModeFromTags(serviceData.Tags),
 			Clients:  make([]bClient, 0),
-			Ports:    fromTags(serviceData.Tags),
+			Ports:    fromTags(uint16(serviceData.Port), serviceData.Tags),
 		}
 		// XXX: register BEFORE new service Name
-        // TODO: Check for intersections of ports ?
 		newService.nflogRegister()
 		newServiceName := transform(&newService)
-		state.IPSets[newServiceName] = make([]string, 0) // empty? ok!
+		state.StaticIPSets[newServiceName] = make([]string, 0) // empty? ok!
 		newService.Name = newServiceName
 		paths := state.generateKVPaths(newServiceName)
 
@@ -229,41 +231,10 @@ func (state *state) generateState() error {
 		state.NodeServices = append(state.NodeServices, newService)
 	}
 	// 3 ok let's append
-	if e := state.getStaticIPSets(); e != nil {
+	if e := state.fillStaticIPSets(); e != nil {
 		return e
 	}
-	state.generateIPSets()
 	return nil
-}
-
-func (state *state) applyState() error {
-	lastContentLock.Lock()
-	defer lastContentLock.Unlock()
-	// begin old rules cleanup
-	for k := range lastIPSetContent {
-		delete(lastIPSetContent, k)
-	}
-	lastIPTablesContent = ""
-	// end old rules cleanup
-
-	// 4 we have to apply IPSET's and remove all unused
-	for name, set := range state.IPSets {
-		if y, e := applyIPSet(name, set); e != nil {
-			logging.LogWarning("Error while creating ipset", name, e.Error())
-			return e
-		} else if !y {
-			logging.LogWarning("create_ipset returned false", name)
-			return errors.New("create_ipset returned false")
-		}
-	}
-	// 5. generate iptables rules
-	if e := applyRules(state.generateRules()); e != nil {
-		return e
-	}
-	// looks like we're ok
-	logging.LogInfo("BEFW refresh done: ", len(state.NodeServices), "services, ", len(state.IPSets), "IPSets")
-	return nil
-
 }
 
 var aliasCache map[string][]bClient
@@ -273,10 +244,11 @@ func refresh(configFile string) (retState *state, retError error) {
 	aliasCache = make(map[string][]bClient) // drop old aliases
 	defer func() {
 		if e := recover(); e != nil {
+            // DISASTER RECOVERY
 			logging.LogWarning("[BEFW] Recovering from error: ", e)
 			state = recoverLastState(configFile)
-			state.applyWhitelistIPSet()
-			err := state.applyState()
+			state.fillMandatoryIPSet()
+			err := fw.Apply(state)
 			if err != nil {
 				logging.LogWarning("[BEFW] Error recovering last state: ", err.Error())
 			}
@@ -290,8 +262,7 @@ func refresh(configFile string) (retState *state, retError error) {
 		logging.LogWarning("Can't refresh state: ", err.Error())
 		return nil, err
 	}
-	//state.applyWhitelistIPSet()
-	if err := state.applyState(); err != nil {
+	if err := fw.Apply(state); err != nil {
 		logging.LogWarning("Can't apply state: ", err.Error())
 		return state, err
 	}
@@ -309,7 +280,7 @@ func showState(configFile string) (data map[string][]string, e error) {
 		return
 	}
 	for _, srv := range state.NodeServices {
-		data[srv.Name] = state.IPSets[srv.Name]
+		data[srv.Name] = state.StaticIPSets[srv.Name]
 		data["*NodeName"] = []string{state.nodeName}
 		data["*NodeDC"] = []string{state.nodeDC}
 	}
@@ -357,12 +328,12 @@ func kv2ServiceClient(pair *api.KVPair) (bClient, error) {
 	if client == nil {
 		return result, errors.New("Bad CIDR: " + pair.Key)
 	}
-	result.clientCIDR = client
+	result.CIDR = client
 	expiryTime, e := strconv.ParseInt(string(pair.Value), 10, 64)
 	if e != nil { // invalid values never expires for safety reasons
 		expiryTime = time.Now().Unix() + 3600 // +1 h
 	}
-	result.clientExpiry = expiryTime
+	result.Expiry = expiryTime
 	return result, nil
 }
 
@@ -403,9 +374,9 @@ func (state *state) consulKVList(prefix string) (api.KVPairs, error) {
 	}
 }
 
-func (state *state) getStaticIPSets() error {
+func (state *state) fillStaticIPSets() error {
 	for _, set := range state.Config.StaticSetList {
-		state.IPSets[set.Name] = make([]string, 0) // empty? ok!
+		state.StaticIPSets[set.Name] = make([]string, 0) // empty? ok!
 		for _, path := range state.generateIPSetKVPaths(set.Name) {
 			if kvs, e := state.consulKVList(path); e != nil {
 				logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
@@ -418,12 +389,12 @@ func (state *state) getStaticIPSets() error {
 							return e
 						} else {
 							for _, newClient := range alias {
-								newClient.appendToIpsetIf(&state.IPSets, set.Name)
+								newClient.appendToIpsetIf(&state.StaticIPSets, set.Name)
 							}
 						}
 					} else {
 						if newClient, e := kv2ServiceClient(kvp); e == nil {
-							newClient.appendToIpsetIf(&state.IPSets, set.Name)
+							newClient.appendToIpsetIf(&state.StaticIPSets, set.Name)
 						} else {
 							logging.LogWarning("Can't add pre-defined ipset", set, e.Error())
 						}
@@ -441,24 +412,10 @@ func (this *bClient) appendToIpsetIf(ipsets *map[string][]string, ipset string) 
 		if (*ipsets)[ipset] == nil {
 			(*ipsets)[ipset] = make([]string, 0)
 		}
-		(*ipsets)[ipset] = append((*ipsets)[ipset], this.clientCIDR.String())
+		(*ipsets)[ipset] = append((*ipsets)[ipset], this.CIDR.String())
 	}
-}
-func (this *bClient) isExpired() bool {
-	epoch := time.Now().Unix()
-	if this.clientExpiry < 0 || this.clientExpiry > epoch {
-		return false
-	}
-	return true
 }
 
-func (state *state) generateIPSets() {
-	for _, localService := range state.NodeServices {
-		for _, c := range localService.Clients {
-			c.appendToIpsetIf(&state.IPSets, localService.Name)
-		}
-	}
-}
 
 func transform(srv *bService) string {
 	serviceName := srv.Name
@@ -478,8 +435,8 @@ func transform(srv *bService) string {
 		}
 	}
 	// 3. add protocol_port_ to the end from first port
-    // TODO: Skip port protocol in service name?
-    if len(srv.Ports) <= 0 { 
+    if len(srv.Ports) <= 0 {
+        logging.LogWarning(fmt.Sprintf("Strange service %s: no ports", srv.Name))
         tmp.WriteString("_nil_nil")
         return tmp.String()
     }
@@ -498,27 +455,6 @@ func isBefw(tags []string) bool {
 		}
 	}
 	return false
-}
-
-func getProtocol(tags []string) befwServiceProto {
-	for _, r := range tags {
-		if r == "tcp" {
-			return ipprotoTcp
-		}
-		if r == "udp" {
-			return ipprotoUdp
-		}
-	}
-	return ipprotoTcp // default is TCP
-}
-
-func getMode(tags []string) string {
-	for _, r := range tags {
-		if r == "enforcing" {
-			return "enforcing"
-		}
-	}
-	return "default"
 }
 
 func RegisterService(configFile, name, protocol string, port int) error {
@@ -579,19 +515,19 @@ func DeregisterService(configFile, name string) error {
 	}
 }
 
-func (state *state) applyWhitelistIPSet() {
-	if state.IPSets == nil {
-		state.IPSets = make(map[string][]string)
+func (state *state) fillMandatoryIPSet() {
+	if state.StaticIPSets == nil {
+		state.StaticIPSets = make(map[string][]string)
 	}
 	for _, conf := range staticIPSetList {
-		if _, ok := state.IPSets[conf.Name]; !ok {
-			state.IPSets[conf.Name] = make([]string, 0)
+		if _, ok := state.StaticIPSets[conf.Name]; !ok {
+			state.StaticIPSets[conf.Name] = make([]string, 0)
 		}
 
 	}
-	state.IPSets[allowIPSetName] = append(state.IPSets[allowIPSetName], mandatoryIPSet...)
+	state.StaticIPSets[allowIPSetName] = append(state.StaticIPSets[allowIPSetName], mandatoryIPSet...)
 	if state.Config == nil || state.Config.WhitelistIPSet == nil {
 		return
 	}
-	state.IPSets[allowIPSetName] = append(state.IPSets[allowIPSetName], state.Config.WhitelistIPSet...)
+	state.StaticIPSets[allowIPSetName] = append(state.StaticIPSets[allowIPSetName], state.Config.WhitelistIPSet...)
 }
