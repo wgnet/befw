@@ -99,7 +99,7 @@ func createConfig(configFile string) *config {
 		}
 		n := 3
 		for k, v := range kv {
-			if confSetPrefix+allowIPSetName == k {
+			if confSetPrefix + SET_ALLOW == k {
 				v0 := strings.Split(v, ";")
 				ret.WhitelistIPSet = v0
 				continue

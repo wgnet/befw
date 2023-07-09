@@ -44,7 +44,7 @@ func TestWhitelistConst(t *testing.T) {
 	}
 	isLocalhost := false
 	is10Net := false
-	if v, ok := s.StaticIPSets[allowIPSetName]; ok {
+	if v, ok := s.StaticIPSets[SET_ALLOW]; ok {
 		for _, set := range v {
 			switch set {
 			case "10.0.0.0/8":
@@ -54,9 +54,9 @@ func TestWhitelistConst(t *testing.T) {
 			}
 		}
 	} else {
-		t.Error("state.StaticIPSets[ allowIPSetName ] is not exists")
+		t.Error("state.StaticIPSets[ SET_ALLOW ] is not exists")
 	}
 	if !is10Net || !isLocalhost {
-		t.Error("state.StaticIPSets[ allowIPSetName ] must contain 10.0.0.0/8 and 192.168.0.0/16")
+		t.Error("state.StaticIPSets[ SET_ALLOW ] must contain 10.0.0.0/8 and 192.168.0.0/16")
 	}
 }

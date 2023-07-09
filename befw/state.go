@@ -525,9 +525,9 @@ func (state *state) fillMandatoryIPSet() {
 		}
 
 	}
-	state.StaticIPSets[allowIPSetName] = append(state.StaticIPSets[allowIPSetName], mandatoryIPSet...)
+	state.StaticIPSets[SET_ALLOW] = append(state.StaticIPSets[SET_ALLOW], mandatoryIPSet...)
 	if state.Config == nil || state.Config.WhitelistIPSet == nil {
 		return
 	}
-	state.StaticIPSets[allowIPSetName] = append(state.StaticIPSets[allowIPSetName], state.Config.WhitelistIPSet...)
+	state.StaticIPSets[SET_ALLOW] = append(state.StaticIPSets[SET_ALLOW], state.Config.WhitelistIPSet...)
 }

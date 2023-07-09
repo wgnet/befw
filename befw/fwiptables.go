@@ -19,7 +19,6 @@ import (
     "errors"
     "sync"
     "strings"
-    "os/exec"
     "github.com/wgnet/befw/logging"
     "fmt"
     "time"
@@ -33,14 +32,21 @@ import (
 type FwIptables struct {
     savedIpset          map[string]string      // Used to check consistent
     savedRules          string
-    appliedRules        string
+    savedRules6         string
     appliedIPSet        map[string]string
+    appliedRules        string
+    appliedRules6       string
     lock                sync.Mutex
 
+    // Mockable bin-call functions
     rulesApply          func(rules string) error
     ipsetApply          func(name, rules string) error
     isIpsetConsistent   func() bool
     isRulesConsistent   func() bool
+
+    // Mockable ipv6 bin-call functions
+    rules6Apply         func(rules string) error
+    isRules6Consistent  func() bool
 }
 
 // Templates of iptables rules
@@ -77,10 +83,15 @@ func NewIptables() FwIptables {
         savedIpset:     make(map[string]string),
         appliedIPSet:   make(map[string]string),
     }
+    // IPv4
     result.rulesApply = result.binRulesApply
     result.ipsetApply = result.binIpsetApply
     result.isIpsetConsistent = result.binIsIpsetConsistent
     result.isRulesConsistent = result.binIsRulesConsistent
+    // IPv6
+    result.rules6Apply        = result.binRules6Apply
+    result.isRules6Consistent = result.binIsRules6Consistent
+
     return result
 }
 
@@ -98,6 +109,10 @@ func (fw FwIptables) KeepConsistent() error {
     if !fw.isRulesConsistent() {
         if e := fw.rulesRestore(); e != nil { return e }
     }
+    // Check ip6tables for consistency
+    if !fw.isRules6Consistent() {
+        if e := fw.rules6Restore(); e != nil { return e }
+    }
 
     return nil
 }
@@ -110,7 +125,7 @@ func (fw FwIptables) Apply(state *state) error {
     ipsets := make(map[string][]string)
 
     // 1. Collect ipsets in one collection
-    // 1.1. Append const IPSets
+    // 1.1. Append const IPSets (empty too)
     for _, set  := range state.Config.StaticSetList {
         ipsets[set.Name] = make([]string, 0)
     }
@@ -128,13 +143,15 @@ func (fw FwIptables) Apply(state *state) error {
             ipsets[srv.Name] = append(ipsets[srv.Name], set.CIDR.String())
         }
     }
-    // 2. Apply ipsets
+    // 2. Apply ipsets (v4 and v6)
     for name, set := range ipsets {
         e := fw.ipsetApply(name, fw.ipsetGenerate(name, set))
         if e != nil { return e }
     }
     // 3. Generate and apply services
-    e := fw.rulesApply(fw.rulesGenerate(state))
+    e := fw.rulesApply(fw.rulesGenerate(state, false))
+    if e != nil { return e }
+    e = fw.rules6Apply(fw.rulesGenerate(state, true))
     if e != nil { return e }
     return nil
 }
@@ -148,6 +165,15 @@ func (fw FwIptables) rulesRestore() error {
     return fw.rulesApply(fw.appliedRules)
 }
 
+// Restore last applied ip6atables rules
+func (fw FwIptables) rules6Restore() error {
+    if fw.appliedRules6 == "" {
+        logging.LogWarning("[IP6T] Failed to restore: empty rules.")
+        return nil
+    }
+    return fw.rules6Apply(fw.appliedRules6)
+}
+
 // Restore last applied ipsets
 func (fw FwIptables) ipsetRestore() error {
     for name, rules := range fw.appliedIPSet {
@@ -158,7 +184,7 @@ func (fw FwIptables) ipsetRestore() error {
 }
 
 // Generate text rules for 'iptables' with defined template
-func (fw FwIptables) rulesGenerate(state *state) string {
+func (fw FwIptables) rulesGenerate(state *state, ip6 bool) string {
     result := new(strings.Builder)
     templates := state.Config.newRules()
     replacer := strings.NewReplacer("{DATE}", time.Now().String())
@@ -173,18 +199,22 @@ func (fw FwIptables) rulesGenerate(state *state) string {
     }
     // 3. Add rules for StaticSetList
     for _, set := range state.Config.StaticSetList {
-        if _, ok := state.StaticIPSets[set.Name]; ok {
+        name := set.Name
+        if ip6 { name += V6 }
+        if _, ok := state.StaticIPSets[name]; ok {
             if set.Target == "NOOP" { continue }
         }
-        strings.NewReplacer("{NAME}", set.Name,
+        strings.NewReplacer("{NAME}", name,
                             "{PRIORITY}", strconv.Itoa(set.Priority),
                             "{TARGET}", set.Target,
                ).WriteString(result, templates.Static)
     }
     // 4. Services
     for _, srv := range state.NodeServices {
-        if state.StaticIPSets[srv.Name] == nil { continue }
-        name := correctIPSetName(srv.Name)
+        if _, ok := state.StaticIPSets[srv.Name]; !ok && len(srv.Clients) <= 0 { continue }
+        name := srv.Name
+        if ip6 { name += V6 }
+        name = correctIPSetName(name)
         // Check template by service mode.
         var templateRule string = templates.Line
         if srv.Mode == MODE_ENFORCING { templateRule = templates.LineE }
@@ -206,29 +236,49 @@ func (fw FwIptables) rulesGenerate(state *state) string {
 // Generate text rules for 'ipset' command
 func (fw FwIptables) ipsetGenerate(name string, set []string) string {
     result := new(strings.Builder)
+    name6 := correctIPSetName(name+V6)
     name = correctIPSetName(name)
     tmp := fmt.Sprintf("tmp_%s", getRandomString())
+    tmp6 := fmt.Sprintf("tmp6_%s", getRandomString())
 
     // 0. Doublecheck if ipset exists
     result.WriteString(fmt.Sprintln("create", name, "hash:net"))
+    result.WriteString(fmt.Sprintln("create", name6, "hash:net", "family inet6"))
     // 1. Create TMP and flusth
     result.WriteString(fmt.Sprintln("create", tmp, "hash:net"))
+    result.WriteString(fmt.Sprintln("create", tmp6, "hash:net", "family inet6"))
     result.WriteString(fmt.Sprintln("flush", tmp))
+    result.WriteString(fmt.Sprintln("flush", tmp6))
     // 2. Fill tmp ipset
     for _, cidr := range set {
-        _, _, e := net.ParseCIDR(cidr)
-        if e != nil { continue }
-        if cidr == "0.0.0.0/0" {
-            logging.LogWarning("[IPT] We will replace 0.0.0.0/0 as it's an ipset limitation")
-            result.WriteString(fmt.Sprintln("add", tmp, "0.0.0.0/1"))
-            result.WriteString(fmt.Sprintln("add", tmp, "128.0.0.0/1"))
+        _, nt, e := net.ParseCIDR(cidr)
+        if e != nil || nt == nil {
+            logging.LogWarning("[IPT] Skip set. Can't parse CIDR: ", cidr)
             continue
         }
-        result.WriteString(fmt.Sprintln("add", tmp, cidr))
+        if isIPv6(cidr)  {
+            if nt.String() == "::/0" {
+                logging.LogWarning("[IP6T] We will replace ::/0 as it's an ipset limitation")
+                result.WriteString(fmt.Sprintln("add", tmp6, "::/1"))
+                continue
+            }
+            result.WriteString(fmt.Sprintln("add", tmp6, cidr))
+        } else {
+            // Dirty replacement of ipset limitation for "0/0"-net
+            if cidr == "0.0.0.0/0" {
+                logging.LogWarning("[IPT] We will replace 0.0.0.0/0 as it's an ipset limitation")
+                result.WriteString(fmt.Sprintln("add", tmp, "0.0.0.0/1"))
+                result.WriteString(fmt.Sprintln("add", tmp, "128.0.0.0/1"))
+                continue
+            }
+            result.WriteString(fmt.Sprintln("add", tmp, cidr))
+        }
     }
     // 3. Swap tmp and real ipset
     result.WriteString(fmt.Sprintln("swap", tmp, name))
+    result.WriteString(fmt.Sprintln("swap", tmp6, name6))
     result.WriteString(fmt.Sprintln("destroy", tmp))
+    result.WriteString(fmt.Sprintln("destroy", tmp6))
     return result.String()
 }
 
@@ -268,79 +318,79 @@ func  portsPerProtocolGenerate(srv bService, template string) []iptablesPort {
 
 func (fw FwIptables) binIsIpsetConsistent() bool {
     for name := range fw.savedIpset {
-        stdout := new(strings.Builder)
-        stdout.Reset()
-        cmd := exec.Command(getBinary("ipset"), "-o", "save", "list", name)
-        cmd.Stdout = stdout
-        if e := cmd.Run(); e != nil {
-            logging.LogWarning("[IPT] Failed to check ipset consistancy:", name, e.Error())
+        out, err := run(nil, "ipset", "-o", "save", "list", name)
+        if err != nil {
+            logging.LogWarning("[IPT] Failed to check ipset consistency:", name, err.Error())
             return false
         }
-        if fw.savedIpset[name] != stdout.String() {
-            return false
-        }
+        if fw.savedIpset[name] != out { return false }
     }
     return true
 }
 
 func (fw FwIptables) binIsRulesConsistent() bool {
     if fw.savedRules == "" { return true }
-    stdout := new(strings.Builder)
-    stdout.Reset()
-    cmd := exec.Command(getBinary("iptables"), "-S", "BEFW")
-    cmd.Stdout = stdout
-    if e := cmd.Run(); e != nil {
-        logging.LogWarning("[IPT] Failed to check iptables consistancy:", e.Error())
+    out, err := run(nil, "iptables", "-S", "BEFW")
+    if err != nil {
+        logging.LogWarning("[IPT] Failed to check iptables consistency:", err.Error())
         return false
     }
-    return fw.savedRules == stdout.String()
+    return fw.savedRules == out
+}
+
+// Check if ip6tables consistent
+func (fw FwIptables) binIsRules6Consistent() bool {
+    out, err := run(nil, "ipset", "-exist", "restore")
+    if err != nil {
+        logging.LogWarning("[IP6T] Failed to check ip6tables consistancy:", err.Error())
+        return false
+    }
+    return fw.savedRules6 == out
 }
 
 // Call 'ipset' binary to apply set-"rules"
 func (fw FwIptables) binIpsetApply(name, rules string) error {
-    // TODO: Check if IPv6 HERE.
-    stdout := new(strings.Builder)
-    cmd := exec.Command(getBinary("ipset"), "-exist", "restore")
-    cmd.Stdin = strings.NewReader(rules)
-    cmd.Stdout = stdout
-    cmd.Stderr = stdout
-    if e := cmd.Run(); e != nil {
-        logging.LogWarning("[IPT] Failed to apply ipset:", stdout.String())
+    // Apply ipset
+    out, err := run(&rules, "ipset", "-exist", "restore")
+    if err != nil {
+        logging.LogWarning("[IPT] Failed to apply ipset:", out)
         logging.LogDebug("Rules (ipset):\n", rules)
-        return errors.New(stdout.String())
-    }
-    // 3. Cleanup
-    stdout.Reset()
-    // 4. Save ipset state
-    cmd = exec.Command(getBinary("ipset"), "-o", "save", "list", name)
-    cmd.Stdout = stdout
-    if e := cmd.Run(); e == nil {
-        fw.savedIpset[name] = stdout.String()
+        return errors.New(out)
     }
     fw.appliedIPSet[name] = rules
+    // Save ipset state
+    out, err = run(nil, "ipset", "-o", "save", "list", name)
+    if err == nil { fw.savedIpset[name] = out }
     return nil
 }
 
 // Call 'iptables' binary to apply rules
 func (fw FwIptables) binRulesApply(rules string) error {
-    // Execute
-    stdout := new(strings.Builder)
-    cmd := exec.Command(getBinary("iptables-restore"), "-n")
-    cmd.Stdin = strings.NewReader(rules)
-    cmd.Stdout = stdout
-    cmd.Stderr = stdout
-    if e := cmd.Run(); e != nil {
-        logging.LogWarning("[IPT] Failed to apply iptables rules:", e.Error())
-        logging.LogDebug("Rules (iptables):\n", rules, "\n----------\n", stdout.String())
-        return errors.New(stdout.String())
-    }
-    // Save state
-    stdout.Reset()
-    cmd = exec.Command(getBinary("iptables"), "-S", "BEFW")
-    cmd.Stdout = stdout
-    if e := cmd.Run(); e == nil {
-        fw.savedRules = stdout.String()
+    // Apply rules
+    out, err := run(&rules, "iptables-restore", "-n")
+    if err != nil {
+        logging.LogWarning("[IPT] Failed to apply iptables rules:", err.Error())
+        logging.LogDebug("Rules (iptables-restore):\n", rules, "\n----------\n", out)
+        return errors.New(out)
     }
     fw.appliedRules = rules
+    // Save state
+    out, err = run(nil, "iptables", "-S", "BEFW")
+    if err == nil { fw.savedRules = out }
+    return nil
+}
+
+func (fw FwIptables) binRules6Apply(rules string) error {
+    // Execute
+    stdout, err := run(&rules, "ip6tables-restore", "-n")
+    if err != nil {
+        logging.LogWarning("[IP6T] Failed to apply ip6tables rules:", err.Error())
+        logging.LogDebug("Rules (ip6tables-restore):\n", rules, "\n----------\n", stdout)
+        return errors.New(stdout)
+    }
+    fw.appliedRules6 = rules
+    // Save state
+    stdout, err = run(nil, "ip6tables", "-S", "BEFW")
+    if err == nil { fw.savedRules6 = stdout }
     return nil
 }

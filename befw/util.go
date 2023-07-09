@@ -20,9 +20,16 @@ import (
 	"path/filepath"
 	"strings"
 	"math/rand"
+    "os/exec"
+    "fmt"
+    "errors"
 )
 
 var randDict []byte
+
+func dbg(msg ...string) {
+    fmt.Println(" [DBG] ", msg)
+}
 
 func getBinary(name string) string {
 	// use pre-built path with right order
@@ -33,6 +40,7 @@ func getBinary(name string) string {
 		"/usr/bin",
 		"/usr/local/sbin",
 		"/usr/local/bin",
+        "",
 	}
 	for _, p := range path {
 		v := filepath.Join(p, name)
@@ -79,9 +87,11 @@ func inArray(arr []string, elem string) bool {
 
 // Cut string to be ipset name
 func correctIPSetName(ipsetName string) string {
-	if len(ipsetName) > 31 { // max size of links
+    const MAX = 31
+	if len(ipsetName) > MAX { // max size of links
 		parts := strings.Split(ipsetName, "_")
-		leftLength := 31 - len(parts[len(parts)-1]) // we can't reduce last part
+        last := parts[len(parts)-1]
+		leftLength := MAX - len(last) // we can't reduce last part
 		maxPartLen := int(leftLength/(len(parts)-1) - 1)
 		for i := 0; i < len(parts)-1; i++ {
 			if len(parts[i]) > maxPartLen {
@@ -92,4 +102,25 @@ func correctIPSetName(ipsetName string) string {
 	} else {
 		return ipsetName
 	}
+}
+
+// Run binary command
+// Exampple:
+//          out, err := run(nil, "echo", "42")  // out == "42\n"
+func run(stdin *string, params ...string) (string, error) {
+    stdout := new(strings.Builder)
+    //stdout.Reset()
+    if len(params) <= 0 { return "", errors.New("Need command as argument") }
+    cmd := exec.Command(getBinary(params[0]), params[1:]...)
+    cmd.Stdout = stdout
+    cmd.Stderr = stdout
+    if stdin != nil { cmd.Stdin = strings.NewReader(*stdin) }
+
+    err := cmd.Run()
+    return stdout.String(), err
+}
+
+// Check if IP is v6 (source: stackoverflow 22751035)
+func isIPv6(address string) bool {
+    return strings.Count(address, ":") >= 2
 }
