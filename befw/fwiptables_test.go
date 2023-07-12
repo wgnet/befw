@@ -95,11 +95,23 @@ func TestApply(t *testing.T) {
     expects(rulesResult, []string{
         "-I BEFW 1 -m set --match-set rules_allow src -j ACCEPT",
         "-I BEFW 2 -m set --match-set rules_deny src -j REJECT",
-        "-A BEFW -p tcp -m multiport --dports 10, 8080:8090 -m set --set B src -j ACCEPT",
-        "-A BEFW -p tcp -m multiport --dports 10, 8080:8090 -j DROP",
-        "-A BEFW -p tcp -m multiport --dports 20, 8085:9090 -m set --set C src -j ACCEPT",
-        "-A BEFW -p tcp -m multiport --dports 20, 8085:9090 -j DROP",
     }, t)
+    if ENABLE_IPT_MULTIPORT {
+        expects(rulesResult, []string{
+            "-A BEFW -p tcp -m multiport --dports 10,8080:8090 -m set --set B src -j ACCEPT",
+            "-A BEFW -p tcp -m multiport --dports 10,8080:8090 -j DROP",
+            "-A BEFW -p tcp -m multiport --dports 20,8085:9090 -m set --set C src -j ACCEPT",
+            "-A BEFW -p tcp -m multiport --dports 20,8085:9090 -j DROP",
+            "-A BEFW -p tcp -m multiport --dports 30 -m set --set D src -j ACCEPT",
+        }, t)
+    } else {
+        expects(rulesResult, []string{
+            "-A BEFW -p tcp --dport 10 -m set --match-set B src -j ACCEPT",
+            "-A BEFW -p tcp --dport 8080:8090 -m set --match-set B src -j ACCEPT",
+            "-A BEFW -p tcp --dport 20 -m set --match-set C src -j ACCEPT",
+            "-A BEFW -p tcp --dport 8085:9090 -m set --match-set C src -j ACCEPT",
+        }, t)
+    }
 
     // Expect pattrins in ipset output
     expects(ipsetResult, []string{
@@ -125,24 +137,20 @@ func TestApply(t *testing.T) {
     if strings.Count(ipsetResult, "create rules_deny hash:net") != 1 { t.Error("Expect rules_deny only once:\n", ipsetResult) }
     if strings.Count(ipsetResult, "create A hash:net") != 1 { t.Error("Expect service A only once:\n", ipsetResult) }
     if strings.Count(ipsetResult, "create B hash:net") != 1 { t.Error("Expect service B only once:\n", ipsetResult) }
-    if strings.Count(rulesResult, "-A BEFW -p tcp -m multiport --dports 10, 8080:8090 -m set --set B src -j ACCEPT") != 1 { t.Error("Expect rules B only once:\n", rulesResult) }
-    if strings.Count(rulesResult, "-A BEFW -p tcp -m multiport --dports 20, 8085:9090 -m set --set C src -j ACCEPT") != 1 { t.Error("Expect rules C only once:\n", rulesResult) }
-
-    // Show Real applied rules
-    // fmt.Println(ipsetResult)
-    // fmt.Println(rulesResult)
+    //if strings.Count(rulesResult, "-A BEFW -p tcp -m multiport --dports 10,8080:8090 -m set --set B src -j ACCEPT") != 1 { t.Error("Expect rules B exact once:\n", rulesResult) }
+    //if strings.Count(rulesResult, "-A BEFW -p tcp -m multiport --dports 20,8085:9090 -m set --set C src -j ACCEPT") != 1 { t.Error("Expect rules C exact once:\n", rulesResult) }
 }
 
 func TestRulesGenerate(t *testing.T) {
     s, fw := dummyState()
-    test := fw.rulesGenerate(&s, false)
+    test := fw.rulesGenerate(&s, s.StaticIPSets, false)
 
     // Expect patterns in output
     expects(test, []string{
         "-I BEFW 1 -m set --match-set rules_allow src -j ACCEPT",
         "-I BEFW 2 -m set --match-set rules_deny src -j REJECT",
-        "-A BEFW -p tcp -m multiport --dports 10, 8080:8090 -m set --set B src -j ACCEPT",
-        "-A BEFW -p tcp -m multiport --dports 10, 8080:8090 -j DROP",
+        // "-A BEFW -p tcp -m multiport --dports 10,8080:8090 -m set --set B src -j ACCEPT",
+        // "-A BEFW -p tcp -m multiport --dports 10,8080:8090 -j DROP",
     }, t)
 }
 
@@ -252,6 +260,8 @@ func dummyState() (state, FwIptables) {
         NodeServices: []bService{
             asService("B", []string{"10/tcp", "8080:8090"}, []string{"1.2.3.3/32", "0.0.0.0/0", "10.0.0.0/12", "5.1.1.3/32", "42.2.3.4"}),
             asService("C", []string{"20/tcp", "8085:9090"}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
+            asService("D", []string{"30/tcp"}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
+            asService("E", []string{}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
         },
     }
     s.Config = &config {

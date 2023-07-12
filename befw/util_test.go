@@ -19,12 +19,9 @@ import(
 	"testing"
 )
 
-// Allows to call system commands (such as 'echo')
-const ENABLE_BIN_CALLS=false
-
 // Test bin util.
 func TestCall(t *testing.T) {
-    if !ENABLE_BIN_CALLS { return }
+    if !ENABLE_BIN_CALLS { return }             // Skip if not allowed
     // Echo call
     stdout, err := run(nil, "echo", "42")
     if err != nil { t.Fail() }

@@ -25,7 +25,14 @@ import (
 	"strings"
 )
 
-var BEFWRegexp = regexp.MustCompile("^befw/\\S+/(?:[\\d\\.]{7,15}(?:/\\d{1,2})?|\\$\\S+\\$)$")
+const (
+    REGEX_IP4 = "(?:\\d{1,3}\\.){3}\\d{1,3}"
+    REGEX_IP4_NET = REGEX_IP4 + "(?:/\\d{1,2})?"
+    REGEX_IP6 = "[A-Fa-f0-9:]{2,39}"            // Dummy ipv6
+    REGEX_IP6_NET = REGEX_IP6 + "(?:/\\d{1,3})?"
+    REGEX_BEFW = "^befw/\\S+/(?:" + REGEX_IP4_NET + "|" + REGEX_IP6_NET + "|" + "\\$\\S+\\$)$"
+)
+var BEFWRegexp = regexp.MustCompile(REGEX_BEFW)
 
 func filterStrings(filterFunc func(string) bool, array []string) []string {
 	result := make([]string, 0)
@@ -74,28 +81,19 @@ func (this *config) getLocalIPSets() map[string][]string {
 var ipNetRegexp *regexp.Regexp
 
 func path2ipnet(path string) (r *net.IPNet) {
-	if ipNetRegexp == nil {
-		ipNetRegexp = regexp.MustCompile("^befw/.*/(\\d+\\.\\d+\\.\\d+\\.\\d+)(?:/(\\d{1,2}))?$")
-	}
-	defer func() {
-		if e := recover(); e != nil {
-			logging.LogWarning("Error while running on '", path, "'", e)
-			r = nil
-		}
-	}()
-	parts := ipNetRegexp.FindStringSubmatch(path)[1:]
-	if parts == nil {
-		return nil
-	}
-	if parts[1] == "" {
-		parts[1] = "32"
-	}
-	if _, cidr, e := net.ParseCIDR(strings.Join(parts, "/")); e != nil {
-		logging.LogWarning("Bad IP syntax: ", path, e.Error())
-		return nil
-	} else {
-		return cidr
-	}
+    if !BEFWRegexp.MatchString(path) { return nil } // not befwpath
+    parts := strings.Split(path, "/")
+    if len(parts) <=2 { return nil } 
+    last := strings.Join(parts[len(parts)-2:], "/")                                 // Try last two elements
+    if _, cidr, e := net.ParseCIDR(last); e == nil && cidr != nil { return cidr }
+    last = parts[len(parts)-1]
+    if isIPv6(last) {
+        last += "/128"  // IPv6 address
+    } else {
+        last += "/32"   // IPv4 addresss
+    }
+    if _, cidr, e := net.ParseCIDR(last); e == nil && cidr != nil { return cidr }   // Try only last element
+    return nil
 }
 
 func (this *config) getLocalServices() []bService {

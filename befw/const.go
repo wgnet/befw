@@ -22,10 +22,16 @@ const (
 	aclDatacenter             = "consul"
 	iptablesStaticSet         = `-I BEFW {PRIORITY} -m set --match-set {NAME} src -j {TARGET}
 `
-	iptablesRulesLine = `
+	iptablesRulesLineMulti = `
 # {NAME}
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -m set --set {NAME} src -j ACCEPT
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -j DROP
+# /{NAME}
+`
+    iptablesRulesLine = `
+# {NAME}
+-A BEFW -p {PROTO} --dport {PORT} -m set --match-set {NAME} src -j ACCEPT
+-A BEFW -p {PROTO} --dport {PORT} -j NFLOG --nflog-group 402
 # /{NAME}
 `
 	iptablesNidsLine = `
@@ -76,3 +82,9 @@ const befwStateSocket = "/var/run/befw/api.sock"
 
 const befwStateBin = "/var/run/befw/state.bin"
 const befwNillService = "anyother.service"
+
+// Code behavior constants
+const (
+    ENABLE_BIN_CALLS        = false     // Allow to execute external commands in tests (such as 'echo')
+    ENABLE_IPT_MULTIPORT    = false     // If true - fill templates based on --dports (allows multiple ports per one rule)
+)

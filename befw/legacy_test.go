@@ -21,6 +21,20 @@ import(
     "strings"
 )
 
+func TestUnmarshalJson(t *testing.T) {
+	jsnService := `{"name":"example", "protocol":"tcp", "port":12345, "ports":[{"port":"1:42", "protocol":"udp"}]}`
+    srv, err := ServiceFromJson([]byte(jsnService))
+    if err != nil { t.Fail() }
+
+    if srv.Name != "example" { t.Error("Wrong name", srv.Name) }
+    score := 0
+    for _, p := range srv.Ports {
+        if p.toTag() == "12345/tcp" { score += 1 }
+        if p.toTag() == "1:42/udp" { score += 1 }
+    }
+    if score != 2 { t.Error("Wrong ports", srv.Ports) }
+}
+
 func TestUnmarshalJsonLegacy(t *testing.T) {
 	// Basic json
 	jsnService := "{\"name\":\"example\", \"protocol\":\"tcp\", \"port\":12345}"

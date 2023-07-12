@@ -57,6 +57,8 @@ type IptablesRules struct {
 	LineE    string `json:"rule_service_e"`
 	Static   string `json:"static_set"`
 	NidsLine string `json:"nids_line"`
+	Header6  string `json:"header6"`
+	Footer6  string `json:"footer6"`
 }
 
 // Util structure: Keep data for templates
@@ -67,13 +69,17 @@ type iptablesPort struct {
 
 // Default iptables rule templates
 func defaultRules() *IptablesRules {
+    lineRule := iptablesRulesLine
+    if ENABLE_IPT_MULTIPORT { lineRule = iptablesRulesLineMulti }
 	return &IptablesRules{
 		Header:   iptablesRulesHeader,
 		Footer:   iptablesRulesFooter,
-		Line:     iptablesRulesLine,
-		LineE:    iptablesRulesLine,
+		Line:     lineRule,
+		LineE:    lineRule,
 		Static:   iptablesStaticSet,
 		NidsLine: iptablesNidsLine,
+		Header6:  iptablesRulesHeader,
+		Footer6:  iptablesRulesFooter,
 	}
 }
 
@@ -132,6 +138,7 @@ func (fw FwIptables) Apply(state *state) error {
 
     // 1.2. Append static IPSets
     for name, sets := range state.StaticIPSets {
+        if _, ok := ipsets[name]; !ok { ipsets[name] = make([]string, 0)}   // empty? ok!
         for _, set := range sets {
             ipsets[name] = append(ipsets[name], set)
         }
@@ -149,9 +156,9 @@ func (fw FwIptables) Apply(state *state) error {
         if e != nil { return e }
     }
     // 3. Generate and apply services
-    e := fw.rulesApply(fw.rulesGenerate(state, false))
+    e := fw.rulesApply(fw.rulesGenerate(state, ipsets, false))
     if e != nil { return e }
-    e = fw.rules6Apply(fw.rulesGenerate(state, true))
+    e = fw.rules6Apply(fw.rulesGenerate(state, ipsets, true))
     if e != nil { return e }
     return nil
 }
@@ -184,12 +191,16 @@ func (fw FwIptables) ipsetRestore() error {
 }
 
 // Generate text rules for 'iptables' with defined template
-func (fw FwIptables) rulesGenerate(state *state, ip6 bool) string {
+func (fw FwIptables) rulesGenerate(state *state, applied map[string][]string, ip6 bool) string {
     result := new(strings.Builder)
     templates := state.Config.newRules()
     replacer := strings.NewReplacer("{DATE}", time.Now().String())
     // 1. Header
-    replacer.WriteString(result, templates.Header)
+    if ip6 {
+        replacer.WriteString(result, templates.Header6)
+    } else {
+        replacer.WriteString(result, templates.Header)
+    }
     // 2. NIDS
     if state.Config.NIDSEnable {
         result.WriteString(
@@ -200,10 +211,11 @@ func (fw FwIptables) rulesGenerate(state *state, ip6 bool) string {
     // 3. Add rules for StaticSetList
     for _, set := range state.Config.StaticSetList {
         name := set.Name
-        if ip6 { name += V6 }
         if _, ok := state.StaticIPSets[name]; ok {
             if set.Target == "NOOP" { continue }
         }
+        if ip6 { name += V6 }
+        name = correctIPSetName(name)
         strings.NewReplacer("{NAME}", name,
                             "{PRIORITY}", strconv.Itoa(set.Priority),
                             "{TARGET}", set.Target,
@@ -211,25 +223,44 @@ func (fw FwIptables) rulesGenerate(state *state, ip6 bool) string {
     }
     // 4. Services
     for _, srv := range state.NodeServices {
-        if _, ok := state.StaticIPSets[srv.Name]; !ok && len(srv.Clients) <= 0 { continue }
+        //if _, ok := state.StaticIPSets[srv.Name]; !ok && len(srv.Clients) <= 0 { continue }
+        if _, ok := applied[srv.Name]; !ok { continue }
         name := srv.Name
         if ip6 { name += V6 }
         name = correctIPSetName(name)
         // Check template by service mode.
         var templateRule string = templates.Line
         if srv.Mode == MODE_ENFORCING { templateRule = templates.LineE }
+
         // Write rule lines
-        ports := portsPerProtocolGenerate(srv, templates.Line)
-        for _, line := range ports {
-            strings.NewReplacer("{NAME}", name,
-                                "{PORT}", line.Port,
-                                "{PORTS}", line.Port,
-                                "{PROTO}", line.Proto,
-            ).WriteString(result, templateRule)
+        if ENABLE_IPT_MULTIPORT {
+            // Multiple ports per rule line:  --dports  1,2,3,...
+            ports := portsPerProtocolGenerate(srv, templates.Line)
+            for _, line := range ports {
+                strings.NewReplacer("{NAME}", name,
+                                    "{PORT}", line.Port,
+                                    "{PORTS}", line.Port,
+                                    "{PROTO}", line.Proto,
+                ).WriteString(result, templateRule)
+            }
+        } else {
+            // One port per rule line:  --dport 1
+            for _, port := range srv.Ports {
+                strings.NewReplacer(
+                    "{NAME}",   name,
+                    "{PORT}",   port.Range(),
+                    "{PORTS}",  port.Range(),
+                    "{PROTO}",  port.Protocol,
+                ).WriteString(result, templateRule)
+            }
         }
     }
     // 5. Footer
-    replacer.WriteString(result, templates.Footer)
+    if ip6 {
+        replacer.WriteString(result, templates.Footer6)
+    } else {
+        replacer.WriteString(result, templates.Footer)
+    }
     return result.String()
 }
 
@@ -306,9 +337,14 @@ func  portsPerProtocolGenerate(srv bService, template string) []iptablesPort {
         portRanges[port.Protocol] = append(portRanges[port.Protocol], port.Range())
     }
     for prot, portRange := range portRanges {
-        if len(portRange) > 0 {
+        port := new(strings.Builder)
+        for i, value := range portRange {
+            if i > 0 { port.WriteString(",") }
+            port.WriteString(value)
+        }
+        if len(port.String()) > 0 {
             lines = append(lines, iptablesPort{
-                Port:  strings.Join(portRange, ", "),
+                Port:  port.String(),
                 Proto: prot,
             })
         }

@@ -27,8 +27,8 @@ import (
 
 var randDict []byte
 
-func dbg(msg ...string) {
-    fmt.Println(" [DBG] ", msg)
+func dbg(msg ...interface{}) {
+    fmt.Println(" [DBG] ", fmt.Sprint(msg...))
 }
 
 func getBinary(name string) string {

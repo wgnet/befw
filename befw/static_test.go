@@ -60,6 +60,18 @@ func TestPath2ipnet(t *testing.T) {
 			IP:   net.IPv4(10, 0, 0, 0),
 			Mask: net.IPv4Mask(255, 0, 0, 0),
 		},
+		"befw/sercvice_tcp_2200/::1:5ee:bad:c0de/96": {
+			IP:   net.IP{0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x05, 0xee, 0, 0, 0, 0},
+			Mask: net.CIDRMask(96, 128),
+		},
+		"befw/sercvice_tcp_2200/cafe:feed::/127": {
+			IP:   net.IP{0xca, 0xfe, 0xfe, 0xed, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Mask: net.CIDRMask(127, 128),
+		},
+		"befw/sercvice_tcp_2200/::/0": {
+			IP:   net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Mask: net.CIDRMask(0, 128),
+		},
 	}
 	equals := func(a, b *net.IPNet) bool {
 		return a.IP.Equal(b.IP) && bytes.Equal([]byte(a.Mask), []byte(b.Mask))

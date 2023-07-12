@@ -108,13 +108,13 @@ func newState(configFile string) *state {
 
 func (state *state) modifyLocalState() {
 	localServices := state.Config.getLocalServices()
-	keys := make(map[string]*bService)
+	keys := make(map[string]bService)
 	for _, localService := range localServices {
-        var first bPort
         if len(localService.Ports) <= 0 {
 			logging.LogWarning(fmt.Sprintf("Skip service %s: no ports", localService.Name))
             continue
         }
+        first := localService.Ports[0]
 		v := api.AgentServiceRegistration{
 			Name: localService.Name,
 			Port: int(first.From),
@@ -128,7 +128,7 @@ func (state *state) modifyLocalState() {
 				localService.Name, e.Error()))
 		} else {
 			logging.LogInfo(fmt.Sprintf("Updating local service %s", localService.Name))
-			keys[localService.Name] = &localService
+			keys[localService.Name] = localService
 		}
 	}
 	// now deregister all 'local' services we has not
@@ -159,11 +159,13 @@ func (state *state) modifyLocalState() {
 }
 
 func fromTags(portNum uint16, tags []string) []bPort {
-    first := bPort { From: portNum, To: portNum, Protocol: PROTOCOL_TCP }
+    // TODO: Remove first port. first port duplicate port in tag.
+    // TODO: Check for port duplicates?
+    //first := bPort { From: portNum, To: portNum, Protocol: PROTOCOL_TCP }
 	result := make([]bPort, 0)
-    result = append(result, first)
+    //result = append(result, first)
 	for _, tag := range tags {
-        if tag == PROTOCOL_UDP { first.Protocol = PROTOCOL_UDP; continue }
+        //if tag == PROTOCOL_UDP { first.Protocol = PROTOCOL_UDP; continue }
 		newport, err := NewBPort(tag)
 		if err != nil { continue }
 		result = append(result, *newport)
