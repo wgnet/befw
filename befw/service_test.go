@@ -1,4 +1,3 @@
-
 /**
  * Copyright 2018-2021 Wargaming Group Limited
  *
@@ -16,85 +15,124 @@
 **/
 package befw
 
-import(
-    "strings"
+import (
+	"strings"
 	"testing"
 )
 
 func TestPort(t *testing.T) {
-    var good []string = []string{"123", "123:234", "10/tcp", "10:100/udp", "33/udp", "42/TcP"}
-    for _, raw := range good {
-        p, e := NewBPort(raw)
-        if p == nil { t.Errorf("Unexpected nil for %s", raw);continue }
-        if e != nil { t.Errorf("Unexpected error for %s: %s", raw, e.Error()); continue }
-        tag := p.toTag()
-        if !strings.EqualFold(tag, raw) && !strings.EqualFold(tag, raw + "/tcp") {
-            t.Errorf("Not equal tag: %s, but expected %s ", p.toTag(), raw)
-        }
-    }
+	var good []string = []string{"123", "123:234", "10/tcp", "10:100/udp", "33/udp", "42/TcP"}
+	for _, raw := range good {
+		p, e := NewBPort(raw)
+		if p == nil {
+			t.Errorf("Unexpected nil for %s", raw)
+			continue
+		}
+		if e != nil {
+			t.Errorf("Unexpected error for %s: %s", raw, e.Error())
+			continue
+		}
+		tag := p.toTag()
+		if !strings.EqualFold(tag, raw) && !strings.EqualFold(tag, raw+"/tcp") {
+			t.Errorf("Not equal tag: %s, but expected %s ", p.toTag(), raw)
+		}
+	}
 }
 
 func TestBadPort(t *testing.T) {
-    var bad []string = []string{"0", "-123:234", "10/xcp", "10:65536/udp", "-12/udp", "65537/TcP"}
-    for _, raw := range bad {
-        p, e := NewBPort(raw)
-        if p != nil { t.Errorf("Expected nil but %s for %s", p.toTag(), raw);continue }
-        if e == nil { t.Errorf("Expected error: %s", raw);continue }
-    }
+	var bad []string = []string{"0", "-123:234", "10/xcp", "10:65536/udp", "-12/udp", "65537/TcP"}
+	for _, raw := range bad {
+		p, e := NewBPort(raw)
+		if p != nil {
+			t.Errorf("Expected nil but %s for %s", p.toTag(), raw)
+			continue
+		}
+		if e == nil {
+			t.Errorf("Expected error: %s", raw)
+			continue
+		}
+	}
 }
 
 func TestIntersectPorts(t *testing.T) {
-    // Intersected
-    yes := []struct{
-        a   string
-        b   string
-    }{ {"10", "1:100"}, {"10:20", "15:100"}, {"10:20", "1:15"},
-       {"10:20", "1:100"}, {"10", "10:100"}, {"100:101", "10:100"}, {"42", "42"} }
-    for _, i := range yes {
-        pA, _ := NewBPort(i.a)
-        pB, _ := NewBPort(i.b)
-        if !pA.IsIntersect(pB) { t.Errorf("Expect intersected: %s - %s", pA.toTag(), pB.toTag());continue}
-        if !pB.IsIntersect(pA) { t.Errorf("Expect intersected: %s - %s", pB.toTag(), pA.toTag());continue}
-    }
-    // Not intersected
-    no := []struct{
-        a   string
-        b   string
-    }{ {"10", "15:100"}, {"10:20", "30:100"}, {"10:20", "1:9"},
-       {"42", "43"}, {"42", "42/udp"} }
-    for _, i := range no {
-        pA, _ := NewBPort(i.a)
-        pB, _ := NewBPort(i.b)
-        if pA.IsIntersect(pB) { t.Errorf("Expect NOT intersected: %s - %s", pA.toTag(), pB.toTag());continue}
-        if pB.IsIntersect(pA) { t.Errorf("Expect NOT intersected: %s - %s", pB.toTag(), pA.toTag());continue}
-    }
+	// Intersected
+	yes := []struct {
+		a string
+		b string
+	}{{"10", "1:100"}, {"10:20", "15:100"}, {"10:20", "1:15"},
+		{"10:20", "1:100"}, {"10", "10:100"}, {"100:101", "10:100"}, {"42", "42"}}
+	for _, i := range yes {
+		pA, _ := NewBPort(i.a)
+		pB, _ := NewBPort(i.b)
+		if !pA.IsIntersect(pB) {
+			t.Errorf("Expect intersected: %s - %s", pA.toTag(), pB.toTag())
+			continue
+		}
+		if !pB.IsIntersect(pA) {
+			t.Errorf("Expect intersected: %s - %s", pB.toTag(), pA.toTag())
+			continue
+		}
+	}
+	// Not intersected
+	no := []struct {
+		a string
+		b string
+	}{{"10", "15:100"}, {"10:20", "30:100"}, {"10:20", "1:9"},
+		{"42", "43"}, {"42", "42/udp"}}
+	for _, i := range no {
+		pA, _ := NewBPort(i.a)
+		pB, _ := NewBPort(i.b)
+		if pA.IsIntersect(pB) {
+			t.Errorf("Expect NOT intersected: %s - %s", pA.toTag(), pB.toTag())
+			continue
+		}
+		if pB.IsIntersect(pA) {
+			t.Errorf("Expect NOT intersected: %s - %s", pB.toTag(), pA.toTag())
+			continue
+		}
+	}
 }
 
 func TestLegacyConversion(t *testing.T) {
-    portA, e := PortFromTag("33:44/tcp")
-    if e != nil { t.Fail() }
-    portB, e := PortFromTag("42/tcp")
-    if e != nil { t.Fail() }
-    legacy := legacyService {
-        ServiceName:        "MyName",
-        ServiceMode:        "enforcing",
-        ServicePort:        123,
-        ServiceProtocol:    befwServiceProto("udp"),
-        ServicePorts:       []legacyBefwPort{ *portA, *portB },
-    }
-    srv, e := legacy.toBService()
-    if e != nil { t.Error("Failed to convert to bService", e.Error()) }
+	portA, e := PortFromTag("33:44/tcp")
+	if e != nil {
+		t.Fail()
+	}
+	portB, e := PortFromTag("42/tcp")
+	if e != nil {
+		t.Fail()
+	}
+	legacy := legacyService{
+		ServiceName:     "MyName",
+		ServiceMode:     "enforcing",
+		ServicePort:     123,
+		ServiceProtocol: befwServiceProto("udp"),
+		ServicePorts:    []legacyBefwPort{*portA, *portB},
+	}
+	srv, e := legacy.toBService()
+	if e != nil {
+		t.Error("Failed to convert to bService", e.Error())
+	}
 
-    // Check
-    const bad = "Bad conversion:"
-    if srv.Mode != MODE_ENFORCING { t.Error(bad, "Wrong mode", srv.Mode.asTag(), "expect", legacy.ServiceMode) }
-    if srv.Name != legacy.ServiceName { t.Error(bad, "Wrong name", legacy.ServiceName, "->", srv.Name) }
-    expects := []string {"123/udp", "33:44/tcp", "42/tcp"}
-    for _, expect := range expects {
-        ok := false
-        for _, p := range srv.Ports {
-            if p.toTag() == expect { ok = true; break }
-        }
-        if !ok { t.Error(bad, "Can't find port", expect, "in", srv.Ports) }
-    }
+	// Check
+	const bad = "Bad conversion:"
+	if srv.Mode != MODE_ENFORCING {
+		t.Error(bad, "Wrong mode", srv.Mode.asTag(), "expect", legacy.ServiceMode)
+	}
+	if srv.Name != legacy.ServiceName {
+		t.Error(bad, "Wrong name", legacy.ServiceName, "->", srv.Name)
+	}
+	expects := []string{"123/udp", "33:44/tcp", "42/tcp"}
+	for _, expect := range expects {
+		ok := false
+		for _, p := range srv.Ports {
+			if p.toTag() == expect {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			t.Error(bad, "Can't find port", expect, "in", srv.Ports)
+		}
+	}
 }

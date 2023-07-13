@@ -15,14 +15,13 @@
 **/
 package befw
 
-
 // Current firewall instance
 var fw Firewall = NewIptables()
 
 // General interface for firewall management.
 type Firewall interface {
-    Apply(*state) error
-    KeepConsistent() error
+	Apply(*state) error
+	KeepConsistent() error
 }
 
 // TODO: nftables support

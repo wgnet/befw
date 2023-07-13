@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"net"
 	"testing"
-	//"fmt"
 )
 
 func TestNet2Strings(t *testing.T) {

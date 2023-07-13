@@ -26,12 +26,13 @@ import (
 )
 
 const (
-    REGEX_IP4 = "(?:\\d{1,3}\\.){3}\\d{1,3}"
-    REGEX_IP4_NET = REGEX_IP4 + "(?:/\\d{1,2})?"
-    REGEX_IP6 = "[A-Fa-f0-9:]{2,39}"            // Dummy ipv6
-    REGEX_IP6_NET = REGEX_IP6 + "(?:/\\d{1,3})?"
-    REGEX_BEFW = "^befw/\\S+/(?:" + REGEX_IP4_NET + "|" + REGEX_IP6_NET + "|" + "\\$\\S+\\$)$"
+	REGEX_IP4     = "(?:\\d{1,3}\\.){3}\\d{1,3}"
+	REGEX_IP4_NET = REGEX_IP4 + "(?:/\\d{1,2})?"
+	REGEX_IP6     = "[A-Fa-f0-9:]{2,39}" // Dummy ipv6
+	REGEX_IP6_NET = REGEX_IP6 + "(?:/\\d{1,3})?"
+	REGEX_BEFW    = "^befw/\\S+/(?:" + REGEX_IP4_NET + "|" + REGEX_IP6_NET + "|" + "\\$\\S+\\$)$"
 )
+
 var BEFWRegexp = regexp.MustCompile(REGEX_BEFW)
 
 func filterStrings(filterFunc func(string) bool, array []string) []string {
@@ -81,28 +82,36 @@ func (this *config) getLocalIPSets() map[string][]string {
 var ipNetRegexp *regexp.Regexp
 
 func path2ipnet(path string) (r *net.IPNet) {
-    if !BEFWRegexp.MatchString(path) { return nil } // not befwpath
-    parts := strings.Split(path, "/")
-    if len(parts) <=2 { return nil } 
-    last := strings.Join(parts[len(parts)-2:], "/")                                 // Try last two elements
-    if _, cidr, e := net.ParseCIDR(last); e == nil && cidr != nil { return cidr }
-    last = parts[len(parts)-1]
-    if isIPv6(last) {
-        last += "/128"  // IPv6 address
-    } else {
-        last += "/32"   // IPv4 addresss
-    }
-    if _, cidr, e := net.ParseCIDR(last); e == nil && cidr != nil { return cidr }   // Try only last element
-    return nil
+	if !BEFWRegexp.MatchString(path) {
+		return nil
+	} // not befwpath
+	parts := strings.Split(path, "/")
+	if len(parts) <= 2 {
+		return nil
+	}
+	last := strings.Join(parts[len(parts)-2:], "/") // Try last two elements
+	if _, cidr, e := net.ParseCIDR(last); e == nil && cidr != nil {
+		return cidr
+	}
+	last = parts[len(parts)-1]
+	if isIPv6(last) {
+		last += "/128" // IPv6 address
+	} else {
+		last += "/32" // IPv4 addresss
+	}
+	if _, cidr, e := net.ParseCIDR(last); e == nil && cidr != nil {
+		return cidr
+	} // Try only last element
+	return nil
 }
 
 func (this *config) getLocalServices() []bService {
 	result := make([]bService, 0)
-	uniqPorts := map[netProtocol][]bPort {
+	uniqPorts := map[netProtocol][]bPort{
 		PROTOCOL_TCP: make([]bPort, 10, 10),
 		PROTOCOL_UDP: make([]bPort, 10, 10),
 	}
-    // 1. Scan directory
+	// 1. Scan directory
 	if files, e := ioutil.ReadDir(this.ServicesDir); e == nil {
 	serviceLoop:
 		for _, file := range files {
@@ -112,29 +121,31 @@ func (this *config) getLocalServices() []bService {
 			name := path.Join(this.ServicesDir, file.Name())
 			if data, e := ioutil.ReadFile(name); e == nil {
 
-                // 2. Parse service JSON
+				// 2. Parse service JSON
 				srv, err := ServiceFromJson(data)
 				if err != nil {
-					logging.LogWarning("Bad service file", file.Name(),  err)
+					logging.LogWarning("Bad service file", file.Name(), err)
 					continue
 				}
-				logging.LogDebug("New service:", srv.toString())
+				logging.LogDebug("New service:", srv.String())
 
-                // 3. Check overlapping ports (warning only)
-                for _, port := range srv.Ports {
-                    if _, ok := uniqPorts[port.Protocol]; !ok { continue }
-                    var uniq []bPort = uniqPorts[port.Protocol]
-                    for _, exist := range uniq {
-                        if exist.IsIntersect(&port) {
-                            // Only warning. Overlapping port reservation should not block service registration
-                            logging.LogWarning("Service ", srv.Name, " has overlapping port: ", port.toTag() )
-                            // continue serviceLoop
-                        }
-                    }
-                    uniq = append(uniq, port)
-                }
+				// 3. Check overlapping ports (warning only)
+				for _, port := range srv.Ports {
+					if _, ok := uniqPorts[port.Protocol]; !ok {
+						continue
+					}
+					var uniq []bPort = uniqPorts[port.Protocol]
+					for _, exist := range uniq {
+						if exist.IsIntersect(&port) {
+							// Only warning. Overlapping port reservation should not block service registration
+							logging.LogWarning("Service ", srv.Name, " has overlapping port: ", port.toTag())
+							// continue serviceLoop
+						}
+					}
+					uniq = append(uniq, port)
+				}
 
-                // 4. Append service
+				// 4. Append service
 				result = append(result, *srv)
 			}
 		}

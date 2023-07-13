@@ -73,7 +73,7 @@ func StartService(configFile string) {
 func startChecker() {
 	go func() {
 		for {
-            fw.KeepConsistent()
+			fw.KeepConsistent()
 			time.Sleep(3 * time.Second)
 		}
 	}()

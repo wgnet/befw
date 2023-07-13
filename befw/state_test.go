@@ -36,7 +36,7 @@ func TestGenerateKVPaths(t *testing.T) {
 	}
 }
 
-func TestWhitelistConst(t *testing.T) {
+func TestMandatorylistConst(t *testing.T) {
 	s := &state{}
 	s.fillMandatoryIPSet()
 	if s.StaticIPSets == nil {

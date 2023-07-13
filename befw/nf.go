@@ -51,7 +51,7 @@ func (this *bService) nflogRegister() {
 	lockServiceClients.Lock()
 	defer lockServiceClients.Unlock()
 	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s (%s)", this.Name,
-                                                                     toTags(this.Ports)))
+		toTags(this.Ports)))
 	if _, ok := allServiceClients[this.Name]; ok {
 		return
 	}
@@ -62,29 +62,35 @@ func (this *bService) nflogRegister() {
 }
 
 func findServiceByPort(port netPort, protocol netProtocol) *serviceUnknownClient {
-    var lookup map[netPort]*serviceUnknownClient
-    if protocol == PROTOCOL_TCP {
-        lookup = serviceByTCP
-    } else if protocol == PROTOCOL_UDP {
-        lookup = serviceByUDP
-    } else { return serviceNil }
+	var lookup map[netPort]*serviceUnknownClient
+	if protocol == PROTOCOL_TCP {
+		lookup = serviceByTCP
+	} else if protocol == PROTOCOL_UDP {
+		lookup = serviceByUDP
+	} else {
+		return serviceNil
+	}
 
-    if _, ok := lookup[port]; ok { return lookup[port] }
+	if _, ok := lookup[port]; ok {
+		return lookup[port]
+	}
 
-    var result *serviceUnknownClient = serviceNil
-    lookupPort, err := NewBPort(fmt.Sprintf("%d/%s", port, protocol))
-    if err != nil { /* Unexpected */ return result }
-    FindPortLoop:
-        for _, srv := range allServiceClients {
-            for _, srvPort := range srv.service.Ports {
-                if srvPort.IsIntersect(lookupPort) {
-                    result = srv
-                    break FindPortLoop
-                }
-            }
-        }
-    lookup[port] = result
-    return result
+	var result *serviceUnknownClient = serviceNil
+	lookupPort, err := NewBPort(fmt.Sprintf("%d/%s", port, protocol))
+	if err != nil { /* Unexpected */
+		return result
+	}
+FindPortLoop:
+	for _, srv := range allServiceClients {
+		for _, srvPort := range srv.service.Ports {
+			if srvPort.IsIntersect(lookupPort) {
+				result = srv
+				break FindPortLoop
+			}
+		}
+	}
+	lookup[port] = result
+	return result
 }
 
 func nflogCallback(payload *nflog.Payload) int {
@@ -155,10 +161,12 @@ func serviceHeader(srv *bService) string {
 	sb.WriteString("Service: ")
 	sb.WriteString(srv.Name)
 	sb.WriteString("\nPorts: ")
-    for i, port := range srv.Ports {
-        if i > 0 { sb.WriteString(", ") }
-        sb.WriteString(port.toTag())
-    }
+	for i, port := range srv.Ports {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(port.toTag())
+	}
 	return sb.String()
 }
 

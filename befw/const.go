@@ -28,7 +28,7 @@ const (
 -A BEFW -p {PROTO} -m multiport --dports {PORTS} -j DROP
 # /{NAME}
 `
-    iptablesRulesLine = `
+	iptablesRulesLine = `
 # {NAME}
 -A BEFW -p {PROTO} --dport {PORT} -m set --match-set {NAME} src -j ACCEPT
 -A BEFW -p {PROTO} --dport {PORT} -j NFLOG --nflog-group 402
@@ -51,10 +51,10 @@ COMMIT
 	packageName   = "befw-firewalld"
 	consulAddress = "127.0.0.1:8500"
 
-	SET_ALLOW = "rules_allow"
-	SET_DENY = "rules_deny"
-    V6  = "_v6"
-	confSetPrefix  = "set."
+	SET_ALLOW     = "rules_allow"
+	SET_DENY      = "rules_deny"
+	V6            = "_v6"
+	confSetPrefix = "set."
 )
 
 var mandatoryIPSet = []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"} // "shoot yourself in the foot"-protection
@@ -85,6 +85,6 @@ const befwNillService = "anyother.service"
 
 // Code behavior constants
 const (
-    ENABLE_BIN_CALLS        = false     // Allow to execute external commands in tests (such as 'echo')
-    ENABLE_IPT_MULTIPORT    = false     // If true - fill templates based on --dports (allows multiple ports per one rule)
+	ENABLE_BIN_CALLS     = false // Allow to execute external commands in tests (such as 'echo')
+	ENABLE_IPT_MULTIPORT = false // If true - fill templates based on --dports (allows multiple ports per one rule)
 )

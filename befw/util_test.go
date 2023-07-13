@@ -15,27 +15,39 @@
 **/
 package befw
 
-import(
+import (
 	"testing"
 )
 
 // Test bin util.
 func TestCall(t *testing.T) {
-    if !ENABLE_BIN_CALLS { return }             // Skip if not allowed
-    // Echo call
-    stdout, err := run(nil, "echo", "42")
-    if err != nil { t.Fail() }
-    if stdout != "42\n" { t.Error("Bad response: `", stdout, "`") }
+	if !ENABLE_BIN_CALLS {
+		return
+	} // Skip if not allowed
+	// Echo call
+	stdout, err := run(nil, "echo", "42")
+	if err != nil {
+		t.Fail()
+	}
+	if stdout != "42\n" {
+		t.Error("Bad response: `", stdout, "`")
+	}
 
-    // Stdin echo|head test
-    stdin := "123456"
-    stdout, err = run(&stdin, "head", "-c2")
-    if err != nil { t.Fail() }
-    if stdout != "12" { t.Error("Bad response (head): `", stdout, "`") }
+	// Stdin echo|head test
+	stdin := "123456"
+	stdout, err = run(&stdin, "head", "-c2")
+	if err != nil {
+		t.Fail()
+	}
+	if stdout != "12" {
+		t.Error("Bad response (head): `", stdout, "`")
+	}
 
-    // Error command
-    _, err = run(nil, "exit", "3")
-    if err == nil { t.Error("Expect error") }
+	// Error command
+	_, err = run(nil, "exit", "3")
+	if err == nil {
+		t.Error("Expect error")
+	}
 }
 
 func TestCutIPSet(t *testing.T) {
@@ -71,6 +83,10 @@ func TestGetBinary(t *testing.T) {
 }
 
 func TestIsIPv6(t *testing.T) {
-   if isIPv6("1.2.3.4") { t.Fail() }
-   if !isIPv6("::1:5ee:bad:c0de") { t.Fail() }
+	if isIPv6("1.2.3.4") {
+		t.Fail()
+	}
+	if !isIPv6("::1:5ee:bad:c0de") {
+		t.Fail()
+	}
 }

@@ -110,19 +110,19 @@ func (state *state) modifyLocalState() {
 	localServices := state.Config.getLocalServices()
 	keys := make(map[string]bService)
 	for _, localService := range localServices {
-        if len(localService.Ports) <= 0 {
+		if len(localService.Ports) <= 0 {
 			logging.LogWarning(fmt.Sprintf("Skip service %s: no ports", localService.Name))
-            continue
-        }
-        first := localService.Ports[0]
+			continue
+		}
+		first := localService.Ports[0]
 		v := api.AgentServiceRegistration{
 			Name: localService.Name,
 			Port: int(first.From),
 			Tags: []string{"local", "befw", (string)(first.Protocol), localService.Mode.asTag()},
 		}
-        for _, p := range localService.Ports {
-            v.Tags = append(v.Tags, p.toTag())
-        }
+		for _, p := range localService.Ports {
+			v.Tags = append(v.Tags, p.toTag())
+		}
 		if e := state.consulClient.Agent().ServiceRegister(&v); e != nil {
 			logging.LogWarning(fmt.Sprintf("Can't register service %s: %s",
 				localService.Name, e.Error()))
@@ -140,34 +140,31 @@ func (state *state) modifyLocalState() {
 			}
 			var prot netProtocol
 			if inArray(consulService.Tags, "udp") {
-			    prot = PROTOCOL_UDP
+				prot = PROTOCOL_UDP
 			} else {
-			    prot = PROTOCOL_TCP
+				prot = PROTOCOL_TCP
 			}
-            if sv, ok := keys[key]; !ok ||
-                        len(sv.Ports) <= 0 ||
-                        !(sv.Ports[0].From == uint16(consulService.Port) && sv.Ports[0].Protocol == prot) {
+			if sv, ok := keys[key]; !ok ||
+				len(sv.Ports) <= 0 ||
+				!(sv.Ports[0].From == uint16(consulService.Port) && sv.Ports[0].Protocol == prot) {
 				// deregister if has not same service
 				if e := state.consulClient.Agent().ServiceDeregister(key); e == nil {
 					logging.LogInfo(fmt.Sprintf("Deregistering non-existing local service %s", key))
 				} else {
 					logging.LogWarning("Can't deregister local service ", key, ". Error: ", e.Error())
 				}
-            }
+			}
 		}
 	}
 }
 
 func fromTags(portNum uint16, tags []string) []bPort {
-    // TODO: Remove first port. first port duplicate port in tag.
-    // TODO: Check for port duplicates?
-    //first := bPort { From: portNum, To: portNum, Protocol: PROTOCOL_TCP }
 	result := make([]bPort, 0)
-    //result = append(result, first)
 	for _, tag := range tags {
-        //if tag == PROTOCOL_UDP { first.Protocol = PROTOCOL_UDP; continue }
 		newport, err := NewBPort(tag)
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 		result = append(result, *newport)
 	}
 	return result
@@ -188,10 +185,10 @@ func (state *state) generateState() error {
 			continue
 		}
 		newService := bService{
-			Name:     serviceName,
-            Mode:     getModeFromTags(serviceData.Tags),
-			Clients:  make([]bClient, 0),
-			Ports:    fromTags(uint16(serviceData.Port), serviceData.Tags),
+			Name:    serviceName,
+			Mode:    getModeFromTags(serviceData.Tags),
+			Clients: make([]bClient, 0),
+			Ports:   fromTags(uint16(serviceData.Port), serviceData.Tags),
 		}
 		// XXX: register BEFORE new service Name
 		newService.nflogRegister()
@@ -246,7 +243,7 @@ func refresh(configFile string) (retState *state, retError error) {
 	aliasCache = make(map[string][]bClient) // drop old aliases
 	defer func() {
 		if e := recover(); e != nil {
-            // DISASTER RECOVERY
+			// DISASTER RECOVERY
 			logging.LogWarning("[BEFW] Recovering from error: ", e)
 			state = recoverLastState(configFile)
 			state.fillMandatoryIPSet()
@@ -418,7 +415,6 @@ func (this *bClient) appendToIpsetIf(ipsets *map[string][]string, ipset string) 
 	}
 }
 
-
 func transform(srv *bService) string {
 	serviceName := srv.Name
 	// 1. lower
@@ -437,12 +433,12 @@ func transform(srv *bService) string {
 		}
 	}
 	// 3. add protocol_port_ to the end from first port
-    if len(srv.Ports) <= 0 {
-        logging.LogWarning(fmt.Sprintf("Strange service %s: no ports", srv.Name))
-        tmp.WriteString("_nil_nil")
-        return tmp.String()
-    }
-    first := srv.Ports[0]
+	if len(srv.Ports) <= 0 {
+		logging.LogWarning(fmt.Sprintf("Strange service %s: no ports", srv.Name))
+		tmp.WriteString("") // Don't use ports in registration name.
+		return tmp.String()
+	}
+	first := srv.Ports[0]
 	tmp.WriteByte('_')
 	tmp.WriteString(first.Protocol)
 	tmp.WriteByte('_')
@@ -473,6 +469,7 @@ func RegisterService(configFile, name, protocol string, port int) error {
 				return errors.New("this Name already exists")
 			}
 			var proto befwServiceProto
+			// Legacy tags support
 			if inArray(v.Tags, "udp") {
 				proto = ipprotoUdp
 			} else {
@@ -528,8 +525,8 @@ func (state *state) fillMandatoryIPSet() {
 
 	}
 	state.StaticIPSets[SET_ALLOW] = append(state.StaticIPSets[SET_ALLOW], mandatoryIPSet...)
-	if state.Config == nil || state.Config.WhitelistIPSet == nil {
+	if state.Config == nil || state.Config.MandatoryIPSet == nil {
 		return
 	}
-	state.StaticIPSets[SET_ALLOW] = append(state.StaticIPSets[SET_ALLOW], state.Config.WhitelistIPSet...)
+	state.StaticIPSets[SET_ALLOW] = append(state.StaticIPSets[SET_ALLOW], state.Config.MandatoryIPSet...)
 }

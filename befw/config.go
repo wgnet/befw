@@ -35,7 +35,7 @@ type config struct {
 	ServicesDir    string
 	IPSetDir       string
 	RulesPath      string
-	WhitelistIPSet []string
+	MandatoryIPSet []string
 	StaticSetList  []staticIPSetConf
 	Timeout        befwConfigTimoutType
 	NIDSEnable     bool
@@ -56,8 +56,8 @@ func createConfig(configFile string) *config {
 		IPSetDir:       staticIpsetPath,
 		ServicesDir:    staticServicesPath,
 		RulesPath:      staticRulesPath,
-		WhitelistIPSet: make([]string, 0),
-		StaticSetList:  staticIPSetList,
+		MandatoryIPSet: make([]string, 0),
+		StaticSetList:  staticIPSetList, // default, TODO: make a Config
 		Timeout: befwConfigTimoutType{
 			Consul:      5 * 60 * time.Second,
 			ConsulWatch: 10 * 60 * time.Second,
@@ -99,9 +99,9 @@ func createConfig(configFile string) *config {
 		}
 		n := 3
 		for k, v := range kv {
-			if confSetPrefix + SET_ALLOW == k {
+			if confSetPrefix+SET_ALLOW == k {
 				v0 := strings.Split(v, ";")
-				ret.WhitelistIPSet = v0
+				ret.MandatoryIPSet = v0
 				continue
 			}
 			if strings.HasPrefix(k, confSetPrefix) {
