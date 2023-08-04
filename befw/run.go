@@ -63,6 +63,7 @@ func startService(configFile string) {
 }
 
 func StartService(configFile string) {
+	logging.LogInfo("Start BEFW Service")
 	go startAPIServer()
 	go nidsChecker()
 	for {
@@ -71,6 +72,7 @@ func StartService(configFile string) {
 }
 
 func startChecker() {
+	time.Sleep(3 * time.Second) // Initial timeout
 	go func() {
 		for {
 			fw.KeepConsistent()

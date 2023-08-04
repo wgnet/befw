@@ -47,6 +47,10 @@ func TestNet2Strings(t *testing.T) {
 
 func TestPath2ipnet(t *testing.T) {
 	table := map[string]*net.IPNet{
+		"befw/$ipset$/rules_deny/1.20.209.254": {
+			IP:   net.IPv4(1, 20, 209, 254),
+			Mask: net.IPv4Mask(255, 255, 255, 255),
+		},
 		"befw/$alias$/$test$/192.168.0.5/24": {
 			IP:   net.IPv4(192, 168, 0, 0),
 			Mask: net.IPv4Mask(255, 255, 255, 0),
