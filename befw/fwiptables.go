@@ -136,6 +136,7 @@ func (fw *fwIPTables) KeepConsistent() error {
 func (fw *fwIPTables) Apply(state *state) error {
 	fw.lock.Lock()
 	defer fw.lock.Unlock()
+	logging.LogDebug("Try to apply state")
 
 	ipsets := make(map[string][]string)
 
@@ -180,6 +181,7 @@ func (fw *fwIPTables) Apply(state *state) error {
 	if e != nil {
 		return e
 	}
+	logging.LogInfo("Applied state.")
 	return nil
 }
 

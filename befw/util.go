@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	REGEXP_IP4_SEG = "(?:2[0-5][0-5]|(?:1[0-9]|[1-9])?[0-9])"
+	REGEXP_IP4_SEG = "(?:25[0-5]|2[0-4][0-9]|(?:1[0-9]|[1-9])?[0-9])"
 	REGEXP_IP4     = "(?:" + REGEXP_IP4_SEG + "\\.){3}" + REGEXP_IP4_SEG
 
 	REGEXP_IP6_SEG   = "(?:[0-9a-fA-F]{1,4})"
