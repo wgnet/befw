@@ -29,7 +29,7 @@ const (
 	REGEX_BEFW = "^befw/\\S+/(?:" + REGEXP_IP4_NET + "|" + REGEXP_IP6_NET + "|" + "\\$\\S+\\$)$"
 )
 
-var befwRegexp = regexp.MustCompile(REGEX_BEFW)
+var BEFWRegexp = regexp.MustCompile(REGEX_BEFW)
 
 func filterStrings(filterFunc func(string) bool, array []string) []string {
 	result := make([]string, 0)
@@ -78,7 +78,7 @@ func (this *config) getLocalIPSets() map[string][]string {
 var ipNetRegexp *regexp.Regexp
 
 func path2ipnet(path string) (r *net.IPNet) {
-	if !befwRegexp.MatchString(path) {
+	if !BEFWRegexp.MatchString(path) {
 		return nil
 	} // not befwpath
 	parts := strings.Split(path, "/")
@@ -123,7 +123,7 @@ func (this *config) getLocalServices() []bService {
 					logging.LogWarning("Bad service file", file.Name(), err)
 					continue
 				}
-				logging.LogDebug("New service:", srv.String())
+				logging.LogDebug("New service: ", srv.String())
 
 				// 3. Check overlapping ports (warning only)
 				for _, port := range srv.Ports {

@@ -204,7 +204,7 @@ func (state *state) generateState() error {
 				return e
 			} else {
 				for _, kvp := range kvs {
-					if !befwRegexp.MatchString(kvp.Key) {
+					if !BEFWRegexp.MatchString(kvp.Key) {
 						continue // do not fucking try
 					}
 					if isAlias(kvp, path) {

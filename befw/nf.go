@@ -17,17 +17,15 @@ package befw
 
 import (
 	"fmt"
-	"github.com/chifflier/nflog-go/nflog"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
 	"github.com/wgnet/befw/logging"
 	"net"
 	"os"
-	"os/signal"
 	"path"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -93,16 +91,15 @@ FindPortLoop:
 	return result
 }
 
-func nflogCallback(payload *nflog.Payload) int {
-	packet := gopacket.NewPacket(payload.Data, layers.LayerTypeIPv4, gopacket.Default)
+func nflogCallback(p gopacket.Packet) int {
 	var protocol netProtocol
 	var port netPort = 0
 	var src net.IP
-	if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
+	if ipLayer := p.Layer(layers.LayerTypeIPv4); ipLayer != nil {
 		ip, _ := ipLayer.(*layers.IPv4)
 		src = ip.SrcIP
 	}
-	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+	if tcpLayer := p.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		protocol = PROTOCOL_TCP
 		tcp, _ := tcpLayer.(*layers.TCP)
 		port = netPort(tcp.DstPort)
@@ -110,7 +107,7 @@ func nflogCallback(payload *nflog.Payload) int {
 			nidsNFCallback(int(port), src)
 		}
 	}
-	if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+	if udpLayer := p.Layer(layers.LayerTypeUDP); udpLayer != nil {
 		protocol = PROTOCOL_UDP
 		udp, _ := udpLayer.(*layers.UDP)
 		port = netPort(udp.DstPort)
@@ -129,25 +126,17 @@ func nflogCallback(payload *nflog.Payload) int {
 }
 
 func StartNFLogger() {
-	q := new(nflog.Queue)
-	q.SetCallback(nflogCallback)
-	q.Init()
-	q.Unbind(syscall.AF_INET)
-	q.Bind(syscall.AF_INET)
-	q.CreateQueue(befwNFQueue)
-	q.SetMode(nflog.NFULNL_COPY_PACKET)
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	go func() {
-		for sig := range c {
-			// sig is a ^C, handle it
-			_ = sig
-			q.Close()
-			os.Exit(0)
-			// XXX we should break gracefully from loop
+		p, err := pcap.OpenLive(fmt.Sprintf("nflog:%d", befwNFQueue), 100, false, pcap.BlockForever)
+		if err != nil {
+			logging.LogWarning("Can't run a PCAP on NFLOG: ", err.Error())
+			return
+		}
+		ps := gopacket.NewPacketSource(p, p.LinkType())
+		for p := range ps.Packets() {
+			nflogCallback(p)
 		}
 	}()
-	go q.TryRun()
 	go func() {
 		for {
 			time.Sleep(1 * time.Minute)

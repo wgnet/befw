@@ -50,7 +50,7 @@ type netProtocol = string // Alias to define protocol
 // BEFW Service object
 type bService struct {
 	Name    string
-	Ports   []bPort
+	Ports   []bPort // TODO: Use separate lists for TCP/UDP ports
 	Clients []bClient
 	Mode    serviceMode
 	// Priority uint8
@@ -70,7 +70,7 @@ type bClient struct {
 }
 
 func (s *bService) String() string {
-	return fmt.Sprintf("%s", s.Name)
+	return fmt.Sprintf("%s [%s]", s.Name, toTags(s.Ports))
 }
 
 // ==========[ bPort ]==========

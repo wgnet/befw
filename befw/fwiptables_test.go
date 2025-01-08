@@ -40,7 +40,8 @@ type mockIPTables struct {
 }
 
 func TestKeepConsistent(t *testing.T) {
-	s, fw, mock := dummyState()
+	s := testDummyState()
+	fw, mock := mockFirewallIPTables()
 
 	// Initialization: Apply generated rules
 	fw.Apply(&s)
@@ -109,7 +110,8 @@ func TestKeepConsistent(t *testing.T) {
 }
 
 func TestApply(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 	fw.Apply(&s)
 
 	// Expect patterns in output
@@ -153,7 +155,7 @@ func TestApply(t *testing.T) {
 		"swap tmp_[a-zA-Z0-9]* C",
 	}, t)
 
-	// Unexpect pattrins in ipset output
+	// Unexpect patterns in ipset output
 	unexpects(ipsetResult, []string{"add tmp_[a-zA-Z0-9]* 42\\.2\\.3\\.4",
 		"add tmp_[a-zA-Z0-9]* 5\\.1\\.",
 	}, t)
@@ -181,7 +183,8 @@ func TestApply(t *testing.T) {
 }
 
 func TestRulesGenerate(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 	test := fw.rulesGenerate(&s, s.StaticIPSets, false)
 
 	// Expect patterns in output
@@ -198,7 +201,8 @@ func TestRulesGenerate(t *testing.T) {
 }
 
 func TestIpsetGenerateServices(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 
 	var result string = ""
 	for _, srv := range s.NodeServices {
@@ -220,7 +224,8 @@ func TestIpsetGenerateServices(t *testing.T) {
 }
 
 func TestIpsetGenerateStaticSetList(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 	var result string = ""
 	for name, set := range s.StaticIPSets {
 		result += fw.ipsetGenerate(name, set)
@@ -235,7 +240,8 @@ func TestIpsetGenerateStaticSetList(t *testing.T) {
 }
 
 func TestIpsetGenerateConstSetList(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 
 	// Check expectations
 	expects := []string{"swap tmp_", "destroy tmp_", "create tmp_"}
@@ -255,7 +261,8 @@ func TestIpsetGenerateConstSetList(t *testing.T) {
 
 // Test IPv6 support (ipset)
 func TestIpsetV6(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 	name := "TestService"
 	srv6 := asService(name, []string{"22/tcp"}, []string{"4.4.4.4/28", "::1:5ee:bad:c0de/80"})
 	s.NodeServices = append(s.NodeServices, srv6)
@@ -290,7 +297,8 @@ func TestIpsetV6(t *testing.T) {
 }
 
 func TestIptablesV6(t *testing.T) {
-	s, fw, _ := dummyState()
+	s := testDummyState()
+	fw, _ := mockFirewallIPTables()
 
 	// Exist v6
 	name := "TestService"
@@ -310,7 +318,7 @@ func TestIptablesV6(t *testing.T) {
 
 // ==========[ Util Func ]==========
 
-func dummyState() (state, *fwIPTables, *mockIPTables) {
+func testDummyState() state {
 	// State:
 	s := state{
 		StaticIPSets: map[string][]string{
@@ -318,10 +326,10 @@ func dummyState() (state, *fwIPTables, *mockIPTables) {
 			"B": []string{"1.2.3.2/32", "0.0.0.0/0", "10.10.10.10/28", "192.168.1.1/32", "42.2.3.4"},
 		},
 		NodeServices: []bService{
-			asService("B", []string{"10/tcp", "8080:8090"}, []string{"1.2.3.3/32", "0.0.0.0/0", "10.0.0.0/12", "5.1.1.3/32", "42.2.3.4"}),
+			asService("B", []string{"10/tcp", "8080:8090", "443/tcp", "443/tcp"}, []string{"1.2.3.3/32", "0.0.0.0/0", "10.0.0.0/12", "5.1.1.3/32", "42.2.3.4"}),
 			asService("C", []string{"20/tcp", "8085:9090"}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
-			asService("D", []string{"30/tcp"}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
-			asService("E", []string{}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
+			asService("test.srv2.stg-hiera_tcp_19080", []string{"30/tcp"}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
+			asService("ThiS_is_very_and_Very_LONG_service", []string{}, []string{"1.2.3.4/32", "10.0.0.0/12", "1.2.3.6/32", "43.2.3.4", "5.1.1.4/32"}),
 		},
 	}
 	s.Config = &config{
@@ -329,6 +337,10 @@ func dummyState() (state, *fwIPTables, *mockIPTables) {
 	}
 	s.fillMandatoryIPSet()
 
+	return s
+}
+
+func mockFirewallIPTables() (*fwIPTables, *mockIPTables) {
 	// Firewall:
 	var fw *fwIPTables = newIPTables()
 	mock := mockIPTables{
@@ -339,7 +351,7 @@ func dummyState() (state, *fwIPTables, *mockIPTables) {
 
 	// ipset
 	mock.mockIpsetList = func(name string) (string, error) { return mock.ipsets[name], nil }
-	mock.mockIpsetRestore = func(name, rules string) error { mock.ipsets[name] = rules; return nil }
+	mock.mockIpsetRestore = func(name string, rules string) error { mock.ipsets[name] = rules; return nil }
 	// iptables
 	mock.mockIptablesList = func() (string, error) { return mock.rules, nil }
 	mock.mockIptablesRestore = func(rules string) error { mock.rules = rules; return nil }
@@ -348,7 +360,7 @@ func dummyState() (state, *fwIPTables, *mockIPTables) {
 	mock.mockIp6tablesRestore = func(rules string) error { mock.rules6 = rules; return nil }
 
 	fw.bin = &mock
-	return s, fw, &mock
+	return fw, &mock
 }
 
 func asService(name string, ports []string, clients []string) bService {
