@@ -40,7 +40,8 @@ You may use single-dc configuration, specify it's name as *dc* though.
 3. Change default [**iptables template**](samples/iptables.rules)
 ## Service
 4. Install & launch befw-firewalld service on every agent node
-5. Edit [sample configuration](samples/befw.conf) and place it to /etc/befw.conf
+5. Edit [sample configuration](samples/befw.conf) and place it to /etc/befw.conf.  Options:
+    - firewall (values: "nft"|"nftc7", default: "") - Change firewall provider: nft - nftables, nftc7 - legacy nftables 0.8 (centos7), otherwise - iptables/ipset
 6. Place [sample service](samples/service.json) to *services dir* and see what will happen
 ## Puppet/Hiera/PuppetDB
 *We use puppet to do items 3-6 and below as we have a huge puppet installation. Skip this if you don't.*
