@@ -25,7 +25,10 @@ import (
 )
 
 // Current firewall instance
-var fw firewall = newIPTables() // Can be configured
+var fw firewall = newIPTables() // Default. Will be reconfigured
+
+const cfg_fw_nftc7 = "nftc7"
+const cfg_fw_nft = "nft"
 
 var OverrideConfig = make(map[string]string)
 
@@ -96,6 +99,19 @@ func createConfig(configFile string) *config {
 		setConfigKVSeconds(&ret.Timeout.Consul, "consul_timeout_sec", OverrideConfig, kv)
 		setConfigKVSeconds(&ret.Timeout.ConsulWatch, "consulwatch_timeout_sec", OverrideConfig, kv)
 		setConfigKVBool(&ret.NIDSEnable, "nids", OverrideConfig, kv)
+
+		// Get firewall provider
+		if val, ok := kv["firewall"]; ok {
+			if val == cfg_fw_nftc7 {
+				logging.LogInfo("Use nftables (nftc7 - for centos7) firewall")
+				fw = NewNFTc7()
+			} else if val == cfg_fw_nft {
+				logging.LogInfo("Use nftables (nft) firewall")
+				fw = NewNFT()
+			} else {
+				logging.LogInfo("Use iptables/ipset firewall")
+			}
+		}
 
 		if _, ok := kv["fail"]; ok {
 			logging.LogError("[Config] you must edit your Config file before proceed")

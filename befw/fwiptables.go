@@ -19,13 +19,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/wgnet/befw/logging"
 	"io/ioutil"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wgnet/befw/logging"
 )
 
 // Implementation of REAL calls of iptables, ip6tables, ipset
@@ -47,7 +48,7 @@ type fwIPTables struct {
 type binIPTables interface {
 	// ipset
 	ipsetList(name string) (string, error)
-	ipsetRestore(name, rule string) error
+	ipsetRestore(name string, rule string) error
 	// iptables
 	iptablesList() (string, error)
 	iptablesRestore(rules string) error
@@ -134,6 +135,7 @@ func (fw *fwIPTables) KeepConsistent() error {
 
 // Apply state
 func (fw *fwIPTables) Apply(state *state) error {
+	logging.LogDebug("Apply state.")
 	fw.lock.Lock()
 	defer fw.lock.Unlock()
 	logging.LogDebug("Try to apply state")
@@ -214,7 +216,7 @@ func (fw *fwIPTables) rulesGenerate(state *state, applied map[string][]string, i
 		if ip6 {
 			name += V6
 		}
-		name = correctIPSetName(name)
+		name = correctIPSetName(name, 31)
 		strings.NewReplacer("{NAME}", name,
 			"{PRIORITY}", strconv.Itoa(set.Priority),
 			"{TARGET}", set.Target,
@@ -230,7 +232,7 @@ func (fw *fwIPTables) rulesGenerate(state *state, applied map[string][]string, i
 		if ip6 {
 			name += V6
 		}
-		name = correctIPSetName(name)
+		name = correctIPSetName(name, 31)
 		// Check template by service mode.
 		var templateRule string = templates.Line
 		if srv.Mode == MODE_ENFORCING {
@@ -272,8 +274,8 @@ func (fw *fwIPTables) rulesGenerate(state *state, applied map[string][]string, i
 // Generate text rules for 'ipset' command
 func (fw *fwIPTables) ipsetGenerate(name string, set []string) string {
 	result := new(strings.Builder)
-	name6 := correctIPSetName(name + V6)
-	name = correctIPSetName(name)
+	name6 := correctIPSetName(name+V6, 31)
+	name = correctIPSetName(name, 31)
 	tmp := fmt.Sprintf("tmp_%s", getRandomString())
 	tmp6 := fmt.Sprintf("tmp6_%s", getRandomString())
 
@@ -288,8 +290,12 @@ func (fw *fwIPTables) ipsetGenerate(name string, set []string) string {
 	// 2. Fill tmp ipset
 	for _, cidr := range set {
 		_, nt, e := net.ParseCIDR(cidr)
-		if e != nil || nt == nil {
-			logging.LogWarning("[IPT] Skip set. Can't parse CIDR: ", cidr)
+		if e != nil {
+			logging.LogWarning("[IPT] Skip set. Can't parse as CIDR: ", cidr)
+			continue
+		}
+		if nt == nil {
+			logging.LogWarning("[IPT] Skip set. No CIDR mask: ", cidr)
 			continue
 		}
 		if isIPv6(cidr) {
@@ -323,7 +329,7 @@ func (fw *fwIPTables) ipsetGenerate(name string, set []string) string {
 func (this *config) newRules() *IptablesRules {
 	rules := defaultRules()
 	if data, e := ioutil.ReadFile(this.RulesPath); e != nil {
-		logging.LogWarning("[IPT] Can't read", this.RulesPath, "; using default:", e.Error())
+		logging.LogWarning("[IPT] Can't read ", this.RulesPath, "; using default: ", e.Error())
 	} else {
 		if e := json.Unmarshal(data, rules); e != nil {
 			logging.LogWarning("[IPT] Can't parse", this.RulesPath, "; using default:", e.Error())
@@ -486,6 +492,7 @@ func (fw *fwIPTables) rules6Restore() error {
 
 // Return state of ipset
 func (b *binRealIPTables) ipsetList(name string) (string, error) {
+	name = correctIPSetName(name, 31)
 	out, err := run(nil, "ipset", "-o", "save", "list", name)
 	if err != nil {
 		logging.LogWarning("[IPT] Failed to get list of ipset:", name, out)

@@ -97,25 +97,31 @@ type nids struct {
  */
 
 func nidsGenerateRandomPorts() []int {
-	ret := make([]int, 0)
-	for i := 0; i < 15; i++ { // 15 is a limit! iptables stuff
+	start := time.Now().Add(5 * time.Second)
+	ret := make(map[int]bool, 0)
+
+	for len(ret) < 15 && start.After(time.Now()) {
 		port := portList[rand.Intn(len(portList))]
-		b := false
-		for _, p := range ret {
-			if p == port {
-				b = true
-				break
-			}
-		}
-		if b {
+		if _, ok := ret[port]; ok {
 			continue
 		}
 		if nidsCheckPortIsInUse(port) {
 			continue
 		}
-		ret = append(ret, port)
+		ret[port] = true
+
 	}
-	return ret
+	if len(ret) < 5 {
+		return []int{} // zero port - too small efficiency
+	} else {
+		r2 := make([]int, len(ret))
+		i := 0
+		for k, _ := range ret {
+			r2[i] = k
+			i++
+		}
+		return r2
+	}
 }
 
 /**

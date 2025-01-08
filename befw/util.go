@@ -16,6 +16,8 @@
 package befw
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -111,12 +113,14 @@ func inArray(arr []string, elem string) bool {
 }
 
 // Cut string to be ipset name
-func correctIPSetName(ipsetName string) string {
-	const MAX = 31
-	if len(ipsetName) > MAX { // max size of links
+func correctIPSetName(ipsetName string, sz int) string {
+	if len(ipsetName) > sz { // max size of links
 		parts := strings.Split(ipsetName, "_")
+		if len(parts) == 1 {
+			return ipsetName[:sz-1]
+		}
 		last := parts[len(parts)-1]
-		leftLength := MAX - len(last) // we can't reduce last part
+		leftLength := sz - len(last) // we can't reduce last part
 		maxPartLen := int(leftLength/(len(parts)-1) - 1)
 		for i := 0; i < len(parts)-1; i++ {
 			if len(parts[i]) > maxPartLen {
@@ -127,6 +131,22 @@ func correctIPSetName(ipsetName string) string {
 	} else {
 		return ipsetName
 	}
+}
+
+// Cut string to be ipset name without last part protection
+func cutSetName(name string, sz int) string {
+	if len(name) <= sz {
+		return name
+	}
+	parts := strings.Split(name, "_")
+	maxPartLen := int(sz / len(parts))
+	for i, part := range parts {
+		if len(part) <= maxPartLen {
+			continue
+		}
+		parts[i] = string(part[:maxPartLen])
+	}
+	return strings.Join(parts, "_")
 }
 
 // Run binary command
@@ -153,4 +173,30 @@ func run(stdin *string, params ...string) (string, error) {
 // Check if IP is v6 (source: stackoverflow 22751035)
 func isIPv6(address string) bool {
 	return strings.Count(address, ":") >= 2
+}
+
+// Sort list of IPs
+func sortIPv46(ips []string) (ipv4 []string, ipv6 []string) {
+	for _, ip := range ips {
+		if len(ip) == 0 {
+			continue
+		}
+		if isIPv6(ip) {
+			ipv6 = append(ipv6, ip)
+		} else {
+			ipv4 = append(ipv4, ip)
+		}
+	}
+	return
+}
+
+// Convert [1,2,3] -> ["1", "2", "3"]
+func sliceIntToStr(i []int) []string {
+	return strings.Split(strings.Trim(fmt.Sprint(i), "[]"), " ")
+}
+
+// MD5 Hash
+func hashMD5(data string) string {
+	sum := md5.Sum([]byte(data))
+	return hex.EncodeToString(sum[:])
 }
