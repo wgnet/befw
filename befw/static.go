@@ -29,7 +29,15 @@ const (
 	REGEX_BEFW = "^befw/\\S+/(?:" + REGEXP_IP4_NET + "|" + REGEXP_IP6_NET + "|" + "\\$\\S+\\$)$"
 )
 
-var BEFWRegexp = regexp.MustCompile(REGEX_BEFW)
+var (
+	BEFWRegexp = regexp.MustCompile(REGEX_BEFW)
+
+	regxIP4    = regexp.MustCompile("^" + REGEXP_IP4 + "$")
+	regxNET32  = regexp.MustCompile("^" + REGEXP_NET_32 + "$")
+	regxIP6    = regexp.MustCompile("^" + REGEXP_IP6 + "$")
+	regxNET128 = regexp.MustCompile("^" + REGEXP_NET_128 + "$")
+	regxAlias  = regexp.MustCompile("^\\$\\S*\\$$")
+)
 
 func filterStrings(filterFunc func(string) bool, array []string) []string {
 	result := make([]string, 0)
@@ -156,4 +164,27 @@ func nets2string(nets []*net.IPNet) []string {
 		result[i] = fmt.Sprintf("%s/%d", k.IP.Mask(k.Mask).String(), ones)
 	}
 	return result
+}
+
+// Translate path: befw/$xxx$/.../1.2.3.4/5  =>  "1.2.3.4/5"
+func path2netpart(path string) string {
+	parts := strings.Split(path, "/")
+	ln := len(parts)
+	if len(parts) <= 2 {
+		return ""
+	}
+
+	switch {
+	case regxIP4.MatchString(parts[ln-2]) && regxNET32.MatchString("/"+parts[ln-1]):
+		return fmt.Sprintf("%s/%s", parts[ln-2], parts[ln-1])
+	case regxIP6.MatchString(parts[ln-2]) && regxNET128.MatchString("/"+parts[ln-1]):
+		return fmt.Sprintf("%s/%s", parts[ln-2], parts[ln-1])
+	case regxIP4.MatchString(parts[ln-1]):
+		return fmt.Sprintf("%s/32", parts[ln-1])
+	case regxIP6.MatchString(parts[ln-1]):
+		return fmt.Sprintf("%s/128", parts[ln-1])
+	case regxAlias.MatchString(parts[ln-1]):
+		return parts[ln-1]
+	}
+	return ""
 }

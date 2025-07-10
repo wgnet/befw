@@ -53,7 +53,7 @@ func TestIPRegex(t *testing.T) {
 
 	// Net32
 	rx = regexp.MustCompile("^" + REGEXP_NET_32 + "$")
-	good = []string{"", "/0", "/1", "/12", "/32"}
+	good = []string{"", "/0", "/1", "/5", "/12", "/32"}
 	bad = []string{"/", "/-", "/33", "/128", "/129"}
 	for _, item := range good {
 		if !rx.MatchString(item) {
