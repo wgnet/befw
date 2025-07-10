@@ -21,6 +21,32 @@ import (
 	"testing"
 )
 
+func TestPath2str(t *testing.T) {
+	expected := map[string]string{
+		"/befw/$alias$/$abc$/$sub_alias-1$":                      "$sub_alias-1$",
+		"/befw/$alias$/$abc$/1.2.3.4/5":                          "1.2.3.4/5",
+		"/befw/$alias$/$abc$/1.2.3.4":                            "1.2.3.4/32",
+		"/befw/$alias$/$abc$/2003:dead:beef:4dad:23:46:bb:101/5": "2003:dead:beef:4dad:23:46:bb:101/5",
+		"/befw/$alias$/$abc$/2003:dead:beef:4dad:23:46:bb:101":   "2003:dead:beef:4dad:23:46:bb:101/128",
+	}
+	wrong := []string{
+		"/befw/$alias$/$abc$/1.2.3.4.5",
+		"/befw/$alias$/$abc$/1.2.3.4/33",
+		"/befw/$alias$/$abc$/text",
+		"/befw/$alias$/$abc$/xxxx:2003:dead:beef:4dad:23:46:bb:101",
+	}
+	for k, v := range expected {
+		if r := path2netpart(k); r != v {
+			t.Error("Expected as valid net-string: ", k, " => ", r, " expect: ", v)
+		}
+	}
+	for _, k := range wrong {
+		if v := path2netpart(k); v != "" {
+			t.Error("Should not be parsed as string: ", k, " =/=> ", v)
+		}
+	}
+}
+
 func TestNet2Strings(t *testing.T) {
 	table := map[*net.IPNet]string{
 		{

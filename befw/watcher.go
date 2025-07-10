@@ -94,12 +94,12 @@ func consulUpdateWatchers(state *state) {
 	for _, s := range state.NodeServices {
 		keys = append(keys, state.generateKVPaths(s.Name)...)
 	}
-	if aliasCache != nil {
-		for s := range aliasCache {
-			keys = append(keys, fmt.Sprintf("befw/$alias$/%s", s))
-		}
-	} else {
+	// Add watchers from cache
+	if len(aliasResolver.cache) == 0 {
 		keys = append(keys, "befw/$alias$")
+	}
+	for s := range aliasResolver.cache {
+		keys = append(keys, fmt.Sprintf("befw/$alias$/%s", s))
 	}
 	sort.Strings(keys)
 	in_keys := func(x string) bool {

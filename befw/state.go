@@ -207,7 +207,7 @@ func (state *state) generateState() error {
 					if !BEFWRegexp.MatchString(kvp.Key) {
 						continue // do not fucking try
 					}
-					if isAlias(kvp, path) {
+					if isAliasPath(kvp, path) {
 						if alias, e := state.getAlias(kvp, path); e != nil {
 							logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
 							return e
@@ -236,11 +236,10 @@ func (state *state) generateState() error {
 	return nil
 }
 
-var aliasCache map[string][]bClient
-
 func refresh(configFile string) (retState *state, retError error) {
 	var state *state
-	aliasCache = make(map[string][]bClient) // drop old aliases
+	// drop old aliases:
+	aliasResolver.Clear()
 	defer func() {
 		if e := recover(); e != nil {
 			// DISASTER RECOVERY
@@ -287,40 +286,33 @@ func showState(configFile string) (data map[string][]string, e error) {
 	return
 }
 
-func isAlias(pair *api.KVPair, path string) bool {
-	aliasName := strings.Replace(pair.Key, path, "", 1)
-	if strings.HasPrefix(aliasName, "$") &&
-		strings.HasSuffix(aliasName, "$") {
-		return true
-	}
-	return false
+func isAliasPath(pair *api.KVPair, path string) bool {
+	return isAlias(strings.Replace(pair.Key, path, "", 1))
 }
 
 func (state *state) getAlias(pair *api.KVPair, path string) ([]bClient, error) {
-	if aliasCache == nil {
-		aliasCache = make(map[string][]bClient)
-	}
 	aliasName := strings.Replace(pair.Key, path, "", 1)
-	if v, ok := aliasCache[aliasName]; ok {
-		return v, nil
-	}
-	path = fmt.Sprintf("befw/$alias$/%s/", aliasName)
-	res := make([]bClient, 0)
-	if kvs, e := state.consulKVList(path); e != nil {
-		return nil, e
-	} else {
-		for _, kvp := range kvs {
-			if kvp.Value == nil {
-				continue
+	// Resolve Alias:
+	aliasResolver.updater = state.consulAlias
+	nets := aliasResolver.Resolve(aliasName)
+
+	result := make([]bClient, 0)
+	for _, netstr := range nets {
+		if _, cidr, e := net.ParseCIDR(netstr); e == nil && cidr != nil {
+			expiryTime, e := strconv.ParseInt(string(pair.Value), 10, 64)
+			if e != nil { // invalid values never expires for safety reasons
+				expiryTime = time.Now().Unix() + 3600 // +1 h
 			}
-			if newClient, e := kv2ServiceClient(kvp); e == nil {
-				res = append(res, newClient)
+			client := bClient{
+				CIDR:   cidr,
+				Expiry: expiryTime,
 			}
+			result = append(result, client)
 		}
-		aliasCache[aliasName] = res
-		return res, nil
 	}
+	return result, nil
 }
+
 func kv2ServiceClient(pair *api.KVPair) (bClient, error) {
 	var expiryTime int64
 	result := bClient{}
@@ -383,7 +375,7 @@ func (state *state) fillStaticIPSets() error {
 				return e
 			} else {
 				for _, kvp := range kvs {
-					if isAlias(kvp, path) {
+					if isAliasPath(kvp, path) {
 						if alias, e := state.getAlias(kvp, path); e != nil {
 							logging.LogWarning("Failed to obtain Consul KV alias data [", path, "]: ", e.Error())
 							return e
