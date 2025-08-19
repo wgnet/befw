@@ -16,50 +16,83 @@
 package befw
 
 import (
+	"context"
 	"fmt"
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
-	"github.com/wgnet/befw/logging"
 	"net"
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/florianl/go-nflog/v2"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/mdlayher/netlink"
+	"github.com/wgnet/befw/logging"
 )
+
+var pktCh chan pktEvent
+var regCh = make(chan *bService, MAX_PORT)
+var wipeCh = make(chan struct{}, 1)
+
+type pktEvent struct {
+	port  netPort
+	proto netProtocol
+	srcIP string
+}
 
 type serviceUnknownClient struct {
 	service *bService
 	clients map[string]int
 }
 
-var allServiceClients = make(map[string]*serviceUnknownClient)
-var serviceByTCP = make(map[netPort]*serviceUnknownClient)
-var serviceByUDP = make(map[netPort]*serviceUnknownClient)
-
-var lockServiceClients = new(sync.RWMutex)
-
-var serviceNil = &serviceUnknownClient{
-	service: nil,
-	clients: make(map[string]int),
+func (svc *bService) nflogRegister() {
+	// copy bService to use it safely inside packetProcessor gorutine
+	immutableSvc := svc.DeepCopy()
+	regCh <- immutableSvc
 }
 
-func (this *bService) nflogRegister() {
-	lockServiceClients.Lock()
-	defer lockServiceClients.Unlock()
-	logging.LogDebug(fmt.Sprintf("[NF] Registering service %s (%s)", this.Name,
-		toTags(this.Ports)))
-	if _, ok := allServiceClients[this.Name]; ok {
-		return
+func (svc *bService) DeepCopy() *bService {
+	if svc == nil {
+		return nil
 	}
-	allServiceClients[this.Name] = &serviceUnknownClient{
-		service: this,
-		clients: make(map[string]int),
+	portsCopy := make([]bPort, len(svc.Ports))
+	copy(portsCopy, svc.Ports)
+
+	clientsCopy := make([]bClient, len(svc.Clients))
+	for i, client := range svc.Clients {
+		var cidrCopy *net.IPNet
+		if client.CIDR != nil {
+			ipCopy := make(net.IP, len(client.CIDR.IP))
+			copy(ipCopy, client.CIDR.IP)
+
+			maskCopy := make(net.IPMask, len(client.CIDR.Mask))
+			copy(maskCopy, client.CIDR.Mask)
+
+			cidrCopy = &net.IPNet{
+				IP:   ipCopy,
+				Mask: maskCopy,
+			}
+		}
+
+		clientsCopy[i] = bClient{
+			CIDR:   cidrCopy,
+			Expiry: client.Expiry,
+		}
+	}
+	return &bService{
+		Name:    svc.Name,
+		Ports:   portsCopy,
+		Clients: clientsCopy,
+		Mode:    svc.Mode,
 	}
 }
 
-func findServiceByPort(port netPort, protocol netProtocol) *serviceUnknownClient {
+func findServiceByPort(port netPort, protocol netProtocol,
+	serviceByTCP map[netPort]*serviceUnknownClient,
+	serviceByUDP map[netPort]*serviceUnknownClient,
+	allServiceClients map[string]*serviceUnknownClient,
+	serviceNil *serviceUnknownClient) *serviceUnknownClient {
 	var lookup map[netPort]*serviceUnknownClient
 	if protocol == PROTOCOL_TCP {
 		lookup = serviceByTCP
@@ -68,7 +101,6 @@ func findServiceByPort(port netPort, protocol netProtocol) *serviceUnknownClient
 	} else {
 		return serviceNil
 	}
-
 	if _, ok := lookup[port]; ok {
 		return lookup[port]
 	}
@@ -91,14 +123,19 @@ FindPortLoop:
 	return result
 }
 
-func nflogCallback(p gopacket.Packet) int {
+func nflogCallback(attrs nflog.Attribute) int {
 	var protocol netProtocol
 	var port netPort = 0
 	var src net.IP
-	if ipLayer := p.Layer(layers.LayerTypeIPv4); ipLayer != nil {
-		ip, _ := ipLayer.(*layers.IPv4)
-		src = ip.SrcIP
+
+	p := gopacket.NewPacket(*attrs.Payload, layers.LayerTypeIPv4, gopacket.Default)
+	ipLayer := p.Layer(layers.LayerTypeIPv4)
+	if ipLayer == nil {
+		// logging.LogWarning("[NF] Non-IPv4 packet, skipping")
+		return 0
 	}
+	ip, _ := ipLayer.(*layers.IPv4)
+	src = ip.SrcIP
 	if tcpLayer := p.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		protocol = PROTOCOL_TCP
 		tcp, _ := tcpLayer.(*layers.TCP)
@@ -113,35 +150,118 @@ func nflogCallback(p gopacket.Packet) int {
 		port = netPort(udp.DstPort)
 	}
 	if port > 0 {
-		srv := findServiceByPort(port, protocol)
-		if srv != nil {
-			if _, ok := srv.clients[src.String()]; !ok {
-				srv.clients[src.String()] = 0
-			}
-			srv.clients[src.String()]++
+		evt := pktEvent{port: port, proto: protocol, srcIP: src.String()}
+		select {
+		case pktCh <- evt:
+		default:
+			logging.LogWarning("[NF] Packet channel is full, dropping packets")
 		}
 	}
-
 	return 0
 }
 
-func StartNFLogger() {
-	go func() {
-		p, err := pcap.OpenLive(fmt.Sprintf("nflog:%d", befwNFQueue), 100, false, pcap.BlockForever)
+func packetProcessor() {
+	allServiceClients := make(map[string]*serviceUnknownClient)
+	serviceByTCP := make(map[netPort]*serviceUnknownClient)
+	serviceByUDP := make(map[netPort]*serviceUnknownClient)
+	serviceNil := &serviceUnknownClient{service: nil, clients: make(map[string]int)}
+
+	syncDataTk := time.NewTicker(1 * time.Minute)
+	defer syncDataTk.Stop()
+	for {
+		select {
+		case ev := <-pktCh:
+			srv := findServiceByPort(ev.port, ev.proto,
+				serviceByTCP, serviceByUDP,
+				allServiceClients, serviceNil)
+			srv.clients[ev.srcIP]++
+		case svc := <-regCh:
+			removeNilIntersections(PROTOCOL_TCP, serviceByTCP, svc)
+			removeNilIntersections(PROTOCOL_UDP, serviceByUDP, svc)
+			if _, ok := allServiceClients[svc.Name]; !ok {
+				allServiceClients[svc.Name] =
+					&serviceUnknownClient{service: svc, clients: make(map[string]int)}
+			}
+		case <-wipeCh:
+			for _, v := range allServiceClients {
+				v.clients = make(map[string]int)
+			}
+			serviceNil.clients = make(map[string]int)
+			logging.LogInfo("[NF] Services stats have been wiped")
+		case <-syncDataTk.C:
+			syncData(allServiceClients, serviceNil)
+		}
+	}
+}
+
+// removeNilIntersections removes entries in serviceByTCP/serviceByUDP where the
+// service is nil and the port intersects with the registered service.
+// This handles race conditions where NFLOG sees packets before the service is registered.
+func removeNilIntersections(protocol netProtocol,
+	serviceMap map[netPort]*serviceUnknownClient,
+	svc *bService) {
+	for port, entry := range serviceMap {
+		if entry.service != nil {
+			continue
+		}
+		lookupPort, err := NewBPort(fmt.Sprintf("%d/%s", port, protocol))
 		if err != nil {
-			logging.LogWarning("Can't run a PCAP on NFLOG: ", err.Error())
+			continue
+		}
+		for _, newPort := range svc.Ports {
+			if newPort.IsIntersect(lookupPort) {
+				logging.LogInfo(fmt.Sprintf(
+					"[NF] Removing nil-service entry for port %d/%s (intersects with %s)",
+					port, protocol, svc.Name))
+				delete(serviceMap, port)
+				break
+			}
+		}
+	}
+}
+
+func StartNFLogger(nfEvenBuffer int) {
+	go func() {
+		config := nflog.Config{
+			Group:    befwNFQueue,
+			Copymode: nflog.CopyPacket,
+		}
+
+		nf, err := nflog.Open(&config)
+		if err != nil {
+			logging.LogError("[NF] Could not open nflog socket: ", err)
 			return
 		}
-		ps := gopacket.NewPacketSource(p, p.LinkType())
-		for p := range ps.Packets() {
-			nflogCallback(p)
+		// StartNFLogger is called once per befw run
+		// on restart/stop kernel close netlink socket
+		// so no need to close it as we are blocking until befw exit
+		// defer nf.Close()
+
+		// Avoid receiving ENOBUFS errors.
+		if err := nf.SetOption(netlink.NoENOBUFS, true); err != nil {
+			logging.LogError(fmt.Sprintf("[NF] Failed to set netlink option %v: %v", netlink.NoENOBUFS, err))
+			nf.Close()
+			return
 		}
-	}()
-	go func() {
-		for {
-			time.Sleep(1 * time.Minute)
-			syncData()
+		pktCh = make(chan pktEvent, nfEvenBuffer)
+
+		hook := func(attrs nflog.Attribute) int {
+			nflogCallback(attrs)
+			return 0
 		}
+		errFunc := func(e error) int {
+			logging.LogError("[NF] Received error on nflog hook: ", e)
+			return 0
+		}
+		err = nf.RegisterWithErrorFunc(context.Background(), hook, errFunc)
+		if err != nil {
+			logging.LogError("[NF] Failed to register nflog hook function: ", err)
+			nf.Close()
+			return
+		}
+		go packetProcessor()
+		// block until befw exit
+		select {}
 	}()
 }
 
@@ -159,9 +279,7 @@ func serviceHeader(srv *bService) string {
 	return sb.String()
 }
 
-func syncData() { // client function
-	lockServiceClients.RLock()
-	defer lockServiceClients.RUnlock()
+func syncData(allServiceClients map[string]*serviceUnknownClient, serviceNil *serviceUnknownClient) { // client function
 	os.MkdirAll(befwState, 0755)
 	for name, svc := range allServiceClients {
 		filename := path.Join(befwState, name)
@@ -199,15 +317,8 @@ func syncData() { // client function
 }
 
 func cleanupMissing() {
-	lockServiceClients.Lock()
-	defer lockServiceClients.Unlock()
-	for _, v := range allServiceClients {
-		for i := range v.clients {
-			delete(v.clients, i)
-		}
+	select {
+	case wipeCh <- struct{}{}:
+	default:
 	}
-	for i := range serviceNil.clients {
-		delete(serviceNil.clients, i)
-	}
-	logging.LogInfo("[NF] Services stats have been wiped")
 }

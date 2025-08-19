@@ -17,8 +17,9 @@ package main
 
 import (
 	"flag"
-	"github.com/wgnet/befw/logging"
 	"os"
+
+	"github.com/wgnet/befw/logging"
 
 	"github.com/wgnet/befw/befw"
 )
@@ -30,6 +31,7 @@ func main() {
 	timeout := flag.String("timeout", "", "Force refresh timeout")
 	consulTimeout := flag.String("consulTimeout", "", "Consul HTTP connection timeout")
 	config := flag.String("config", "/etc/befw.conf", "Config file for befw")
+	nflogEventBuffer := flag.Int("nflogbuffer", 64*1024, "NFlog Event buffer")
 	flag.Parse()
 
 	if *debug {
@@ -49,7 +51,7 @@ func main() {
 		logging.LogError("You must be r00t to run as a service")
 	}
 	if !*nonflog {
-		befw.StartNFLogger()
+		befw.StartNFLogger(*nflogEventBuffer)
 		logging.LogInfo("NFLogger started, you can get information from /var/run/befw/*")
 	}
 	befw.StartService(*config)
